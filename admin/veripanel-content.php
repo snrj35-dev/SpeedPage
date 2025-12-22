@@ -37,14 +37,14 @@
 <i class="fa fa-download"></i> <span lang="db_export"></span>
 </button>
 
-<button class="btn btn-outline-primary btn-sm mb-2" onclick="downloadSQLFile()">
-    <i class="fa fa-file-download"></i> Yedek İndir (.sql)
-</button>
+    <button class="btn btn-outline-primary btn-sm mb-2" onclick="downloadSQLFile()">
+    <i class="fa fa-file-download"></i> <span lang="download_backup"></span>
+    </button>
 
 <form id="uploadSqlForm" enctype="multipart/form-data" onsubmit="return uploadSqlFile(this)">
-    <div class="input-group mb-2">
+        <div class="input-group mb-2">
         <input type="file" name="sql_file" id="sql_file" accept=".sql" class="form-control form-control-sm">
-        <button class="btn btn-warning btn-sm" type="submit"><i class="fa fa-upload"></i> Yedek Yükle</button>
+        <button class="btn btn-warning btn-sm" type="submit"><i class="fa fa-upload"></i> <span lang="upload_backup_button"></span></button>
     </div>
 </form>
 
@@ -52,7 +52,7 @@
 
 <hr>
 <h5 lang="sql_console"></h5>
-<textarea id="sql" class="form-control" rows="4"></textarea>
+<textarea id="sql" class="form-control" rows="4" data-placeholder="sql_placeholder"></textarea>
 <button class="btn btn-primary mt-2" onclick="runSQL()"><span lang="run_sql_button"></span></button>
 <pre id="sqlResult" class="mt-2 bg-light p-2"></pre>
 <hr>

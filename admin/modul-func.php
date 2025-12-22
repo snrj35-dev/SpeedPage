@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS module_assets (
 if ($action === 'upload') {
 
     if (!isset($_FILES['module_zip'])) {
-        echo json_encode(["status"=>"error","message"=>"Zip dosyası bulunamadı"]);
+        echo json_encode(["status"=>"error","message"=>"Zip dosyası bulunamadı","message_key"=>"module_zip_missing"]);
         exit;
     }
 
@@ -47,14 +47,14 @@ if ($action === 'upload') {
         $zip->extractTo($extractPath);
         $zip->close();
     } else {
-        echo json_encode(["status"=>"error","message"=>"Zip açılamadı"]);
+        echo json_encode(["status"=>"error","message"=>"Zip açılamadı","message_key"=>"zip_open_failed"]);
         exit;
     }
 
     /* ---------------- Read module.json ---------------- */
     $configFile = $extractPath . "/module.json";
     if (!file_exists($configFile)) {
-        echo json_encode(["status"=>"error","message"=>"module.json bulunamadı"]);
+        echo json_encode(["status"=>"error","message"=>"module.json bulunamadı","message_key"=>"module_json_missing"]);
         exit;
     }
 
@@ -151,10 +151,10 @@ if ($action === 'upload') {
             }
         }
 
-        echo json_encode(["status"=>"success","message"=>"Modül başarıyla yüklendi"]);
+        echo json_encode(["status"=>"success","message"=>"Modül başarıyla yüklendi","message_key"=>"module_upload_success"]);
 
     } catch (Exception $e) {
-        echo json_encode(["status"=>"error","message"=>"DB hata: " . $e->getMessage()]);
+        echo json_encode(["status"=>"error","message"=>"DB hata: " . $e->getMessage(),"message_key"=>"errdata"]);
     }
 
     exit;
@@ -171,7 +171,7 @@ elseif ($action === 'delete') {
     $module = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$module) {
-        echo json_encode(["status"=>"error","message"=>"Modül bulunamadı"]);
+        echo json_encode(["status"=>"error","message"=>"Modül bulunamadı","message_key"=>"module_not_found"]);
         exit;
     }
 
@@ -240,7 +240,7 @@ elseif ($action === 'delete') {
         }
     }
 
-    echo json_encode(["status"=>"success","message"=>"Modül ve dosyaları tamamen silindi"]);
+    echo json_encode(["status"=>"success","message"=>"Modül ve dosyaları tamamen silindi","message_key"=>"module_uninstalled"]);
     exit;
 }
 
@@ -278,9 +278,9 @@ elseif ($action === 'toggle') {
             $db->prepare("UPDATE menus SET is_active=? WHERE page_id=?")->execute([$newState, $page_id]);
         }
 
-        echo json_encode(["status"=>"success","message"=>($newState ? "Modül etkinleştirildi" : "Modül devre dışı bırakıldı"), "is_active"=>$newState]);
+        echo json_encode(["status"=>"success","message"=>($newState ? "Modül etkinleştirildi" : "Modül devre dışı bırakıldı"), "message_key"=>($newState?"module_activated":"module_deactivated"), "is_active"=>$newState]);
     } catch (Exception $e) {
-        echo json_encode(["status"=>"error","message"=>"DB hata: " . $e->getMessage()]);
+        echo json_encode(["status"=>"error","message"=>"DB hata: " . $e->getMessage(),"message_key"=>"errdata"]);
     }
 
     exit;

@@ -15,7 +15,7 @@ $registration_enabled = $config['registration_enabled'] ?? '1';
 
 // Eğer kayıtlar kapalıysa kullanıcıyı yönlendir veya durdur
 if ($registration_enabled === '0') {
-    die("Kayıt işlemleri şu anda kapalıdır. <a href='../index.php'>Geri Dön</a>");
+    die('<div class="alert alert-warning text-center small"><span lang="registration_closed"></span> <a href="../index.php"><span lang="back_to_home"></span></a></div>');
 }
 
 $error_message = '';
@@ -28,29 +28,36 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $password_confirm = $_POST['parola_tekrar'] ?? '';
 
     if (empty($username) || empty($password)) {
-        $error_message = "Lütfen tüm alanları doldurun.";
+        $error_message = '<span lang="fill_all_fields"></span>';
     } elseif ($password !== $password_confirm) {
-        $error_message = "Şifreler birbiriyle eşleşmiyor.";
+        $error_message = '<span lang="password_mismatch"></span>';
     } elseif (strlen($password) < 6) {
-        $error_message = "Şifre en az 6 karakter olmalıdır.";
+        $error_message = '<span lang="password_too_short"></span>';
     } else {
         try {
             // Kullanıcı adı kontrolü
             $check = $db->prepare("SELECT id FROM users WHERE username = ?");
             $check->execute([$username]);
-            if ($check->fetch()) {
-                $error_message = "Bu kullanıcı adı zaten alınmış.";
+                if ($check->fetch()) {
+                $error_message = '<span lang="username_taken"></span>';
             } else {
                 // Şifreyi hashle ve kaydet
                 $hash = password_hash($password, PASSWORD_DEFAULT);
-                $role = 'user'; // Varsayılan rol
-                $is_active = ($config['email_verification'] === '1') ? 0 : 1; // Aktivasyon gerekliyse pasif aç
+                $role = 'user'; 
+                $is_active = ($config['email_verification'] === '1') ? 0 : 1;
+                
+                // ✅ OTOMATİK DEĞERLER
+                $default_avatar = 'fa-user'; // Varsayılan ikon
+                $display_name = $username;   // İlk başta display_name kullanıcı adı olsun
 
-                $ins = $db->prepare("INSERT INTO users (username, password_hash, role, is_active) VALUES (?, ?, ?, ?)");
-                $ins->execute([$username, $hash, $role, $is_active]);
+                // Sorguyu güncelliyoruz
+                $ins = $db->prepare("INSERT INTO users (username, display_name, password_hash, role, is_active, avatar_url) VALUES (?, ?, ?, ?, ?, ?)");
+                $ins->execute([$username, $display_name, $hash, $role, $is_active, $default_avatar]);
 
-                $success_message = "Kayıt başarılı! Şimdi giriş yapabilirsiniz.";
-                // İstersen burada direkt login.php'ye yönlendirebilirsin
+                $success_message = '<span lang="registration_success"></span>';
+                
+                // ✅ 2 Saniye sonra otomatik yönlendirme (İsteğe bağlı)
+                header("Refresh: 2; url=login.php");
             }
         } catch (Exception $e) {
             $error_message = "Bir hata oluştu: " . $e->getMessage();

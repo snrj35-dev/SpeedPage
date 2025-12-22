@@ -7,13 +7,13 @@ $slug = $_GET['slug'] ?? '';
 $slug = preg_replace('/[^a-z0-9_-]/', '', $slug);
 
 if (!$slug) {
-    die("Invalid page");
+    die('<span lang="ersayfa"></span>');
 }
 
 $file = SAYFALAR_DIR . "$slug.php";
 
 if (!file_exists($file)) {
-    die("Page not found");
+    die('<span lang="ersayfa2"></span>');
 }
 
 // Delete physical file

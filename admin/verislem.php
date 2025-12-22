@@ -58,7 +58,7 @@ if ($action === "insert") {
     $t = clean_table($_POST["table"] ?? "");
 
     if (!isset($_POST["data"]) || !is_array($_POST["data"])) {
-        echo json_encode(["ok" => false, "error" => "DATA_MISSING"]);
+        echo json_encode(["ok" => false, "error" => "DATA_MISSING", "message_key" => "data_missing"]);
         exit;
     }
 
@@ -222,7 +222,7 @@ if ($action === "import_sql") {
 if ($action === 'import_file') {
     try {
         if (!isset($_FILES['sql_file']) || $_FILES['sql_file']['error'] !== UPLOAD_ERR_OK) {
-            echo json_encode(["ok" => false, "error" => "NO_FILE"]);
+            echo json_encode(["ok" => false, "error" => "NO_FILE", "message_key" => "no_file"]);
             exit;
         }
 
@@ -230,13 +230,13 @@ if ($action === 'import_file') {
 
         $content = file_get_contents($f['tmp_name']);
         if (!$content) {
-            echo json_encode(["ok" => false, "error" => "EMPTY_FILE"]);
+            echo json_encode(["ok" => false, "error" => "EMPTY_FILE", "message_key" => "empty_file"]);
             exit;
         }
 
         // Basic safety checks - block dangerous keywords for non-admins
         if (!$is_admin && preg_match('/\b(drop|attach|pragma|sqlite_master|\.read)\b/i', $content)) {
-            echo json_encode(["ok" => false, "error" => "FORBIDDEN_KEYWORDS_IN_FILE"]);
+            echo json_encode(["ok" => false, "error" => "FORBIDDEN_KEYWORDS_IN_FILE", "message_key" => "forbidden_keywords_in_file"]);
             exit;
         }
 

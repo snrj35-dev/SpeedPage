@@ -15,7 +15,7 @@ if ($method === 'GET') {
         $stmt->execute([$id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($row) echo json_encode(['ok' => true, 'user' => $row]);
-        else echo json_encode(['ok' => false, 'error' => 'NOT_FOUND']);
+        else echo json_encode(['ok' => false, 'error' => 'NOT_FOUND', 'message_key' => 'user_not_found']);
         exit;
     }
 
@@ -36,7 +36,7 @@ if ($method === 'POST') {
         $is_active = isset($_POST['is_active']) ? (int)$_POST['is_active'] : 1;
 
         if (!$username || !$password) {
-            echo json_encode(['ok' => false, 'error' => 'MISSING']);
+            echo json_encode(['ok' => false, 'error' => 'MISSING', 'message_key' => 'fill_all_fields']);
             exit;
         }
 
@@ -46,7 +46,7 @@ if ($method === 'POST') {
             $stmt->execute([$username, $hash, $role, $is_active]);
             echo json_encode(['ok' => true]);
         } catch (Exception $e) {
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage(), 'message_key' => 'errdata']);
         }
         exit;
     }
@@ -60,7 +60,7 @@ if ($method === 'POST') {
         $is_active = isset($_POST['is_active']) ? (int)$_POST['is_active'] : 1;
 
         if (!$id || !$username) {
-            echo json_encode(['ok' => false, 'error' => 'MISSING']);
+            echo json_encode(['ok' => false, 'error' => 'MISSING', 'message_key' => 'fill_all_fields']);
             exit;
         }
 
@@ -86,15 +86,15 @@ if ($method === 'POST') {
             }
             echo json_encode(['ok' => true]);
         } catch (Exception $e) {
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage(), 'message_key' => 'errdata']);
         }
         exit;
     }
 
     if ($action === 'delete') {
         $id = (int)($_POST['id'] ?? 0);
-        if (!$id) { echo json_encode(['ok' => false, 'error' => 'MISSING']); exit; }
-        if ($id === 1) { echo json_encode(['ok' => false, 'error' => 'MAIN_ADMIN']); exit; }
+        if (!$id) { echo json_encode(['ok' => false, 'error' => 'MISSING', 'message_key' => 'data_missing']); exit; }
+        if ($id === 1) { echo json_encode(['ok' => false, 'error' => 'MAIN_ADMIN', 'message_key' => 'main_admin_cannot_be_deleted']); exit; }
         try {
             $db->prepare("DELETE FROM users WHERE id=?")->execute([$id]);
             echo json_encode(['ok' => true]);

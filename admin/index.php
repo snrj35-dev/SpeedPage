@@ -4,7 +4,13 @@ require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/db.php';
 
 $pages = $db->query("SELECT * FROM pages ORDER BY sort_order, slug")->fetchAll(PDO::FETCH_ASSOC);
+$userQuery = $db->prepare("SELECT display_name, username, avatar_url FROM users WHERE id = ?");
+        $userQuery->execute([$_SESSION['user_id']]);
+        $currentUser = $userQuery->fetch();
 
+        // Görünen isim önceliği: display_name > username > 'Kullanıcı'
+        $finalName = $currentUser['display_name'] ?: ($currentUser['username'] ?: 'Kullanıcı');
+        $finalAvatar = $currentUser['avatar_url'] ?: 'fa-user';
 ?>
 
 <!DOCTYPE html>
@@ -15,7 +21,7 @@ $pages = $db->query("SELECT * FROM pages ORDER BY sort_order, slug")->fetchAll(P
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SpeedPage Admin</title>
+    <title><span lang="page_title"></span></title>
     <link rel="stylesheet" href="<?= CDN_URL ?>css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= CDN_URL ?>css/all.min.css">
     <link rel="stylesheet" href="<?= CDN_URL ?>css/style.css">
@@ -26,9 +32,21 @@ $pages = $db->query("SELECT * FROM pages ORDER BY sort_order, slug")->fetchAll(P
     <span class="fw-bold" lang="page_title"></span>
 
     <div class="ms-auto d-flex align-items-center gap-3">
-        <span>👋 <?= htmlspecialchars($username) ?></span>
-        <a href="../php/logout.php" class="btn btn-sm btn-outline-danger" lang="logout"></a>
-        <button id="theme-toggle" onclick="toggleTheme()">🌙</button>
+        <a href="<?= BASE_URL ?>php/profile.php?id=<?= $_SESSION['user_id'] ?>" 
+           class="d-flex align-items-center text-decoration-none me-3 transition-hover">
+            
+            <div class="nav-avatar-circle bg-primary text-white d-flex align-items-center justify-content-center me-2 shadow-sm" 
+                 style="width: 35px; height: 35px; border-radius: 50%; font-size: 14px;">
+                <i class="fas <?= htmlspecialchars($finalAvatar) ?>"></i>
+            </div>
+            
+            <span class="fw-bold text-light d-none d-sm-inline"> 
+                <?= htmlspecialchars($finalName) ?> 
+            </span>
+        </a>
+        <a href="../index.php" class="btn btn-sm btn-outline-success"> <i class="fa-solid fa-home"></i></a>
+        <a href="../php/logout.php" class="btn btn-sm btn-outline-danger"> <i class="fa-solid fa-right-from-bracket"></i></a>
+        <button id="theme-toggle" onclick="toggleTheme()"><i class="fas fa-moon"></i></button>
     </div>
 </nav>
 
@@ -39,7 +57,7 @@ $pages = $db->query("SELECT * FROM pages ORDER BY sort_order, slug")->fetchAll(P
                 data-bs-toggle="tab"
                 data-bs-target="#settings"
                 type="button">
-            📄 <span lang="settings"></span>
+            <i class="fas fa-file-alt"></i> <span lang="settings"></span>
         </button>
     </li>
 
@@ -48,76 +66,80 @@ $pages = $db->query("SELECT * FROM pages ORDER BY sort_order, slug")->fetchAll(P
                 data-bs-toggle="tab"
                 data-bs-target="#pages"
                 type="button">
-            📄 <span lang="pages"></span>
+            <i class="fas fa-file"></i> <span lang="pages"></span>
         </button>
     </li>
 
     <li class="nav-item">
         <button class="nav-link"
                 data-bs-toggle="tab"
-                data-bs-target="#menu">
-            📋 <span lang="menu_management"></span>
+                data-bs-target="#menu"
+                type="button">
+            <i class="fas fa-clipboard-list"></i> <span lang="menu_management"></span>
         </button>
     </li>
+
     <li class="nav-item">
         <button class="nav-link"
                 data-bs-toggle="tab"
                 data-bs-target="#modules"
                 type="button">
-            🧩 <span lang="modules"></span>
+            <i class="fas fa-puzzle-piece"></i> <span lang="modules"></span>
         </button>
     </li>
+
     <?php if (!empty($is_admin) && $is_admin): ?>
     <li class="nav-item">
       <button class="nav-link"
           data-bs-toggle="tab"
           data-bs-target="#users"
           type="button">
-        👥 <span lang="users">Users</span>
+        <i class="fas fa-users"></i> <span lang="users"></span>
       </button>
     </li>
     <?php endif; ?>
+
     <li class="nav-item">
         <button class="nav-link"
                 data-bs-toggle="tab"
                 data-bs-target="#dbpanel"
                 type="button">
-            🗄️ <span lang="database"></span>
+            <i class="fas fa-database"></i> <span lang="database"></span>
         </button>
     </li>
 </ul>
+
 <!-- TAB CONTENT -->
 <div class="tab-content">
-      <!-- 📄 Genel AYARLAR -->
+      <!--  Genel AYARLAR -->
     <div class="tab-pane fade show active p-4" id="settings">
     <?php require __DIR__ . "/settings-panel.php"; ?>
     </div>
 
-    <!-- 📄 SAYFALAR -->
+    <!--  SAYFALAR -->
     <div class="tab-pane fade p-4" id="pages">
     <?php require __DIR__ . "/page-panel.php"; ?>
     </div>
 
-    <!-- 📋 MENÜ PANELİ -->
+    <!--  MENÜ PANELİ -->
     <div class="tab-pane fade p-4" id="menu" style="min-height:400px;">
         <?php require __DIR__ . "/menu-panel.php"; ?>
     </div>
 
-    <!-- 🧩 MODÜLLER --> 
+    <!--  MODÜLLER --> 
      <div class="tab-pane fade p-4" id="modules"> 
            <?php require __DIR__ . "/modules-panel.php"; ?> 
      </div>
 
     <?php if (!empty($is_admin) && $is_admin): ?>
-    <!-- 👥 USERS -->
+    <!--  USERS -->
     <div class="tab-pane fade p-4" id="users">
       <?php require __DIR__ . "/user-panel.php"; ?>
     </div>
     <?php endif; ?>
 
     <?php if (!empty($is_admin) && $is_admin): ?>
-    <!-- 👥 USERS -->
-    <!-- 🗄️ DB PANEL -->
+    <!--  DB PANEL -->
     <div class="tab-pane fade p-4" id="dbpanel">
         <?php require __DIR__ . "/veripanel-content.php"; ?>
     </div>

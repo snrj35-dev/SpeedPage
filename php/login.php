@@ -28,10 +28,16 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['username'];
-                // store role in session for authorization
                 $_SESSION['role'] = $user['role'] ?? 'user';
 
-                header("Location: ../admin/index.php");
+                // ROL KONTROLÜ VE YÖNLENDİRME
+                if ($_SESSION['role'] === 'admin') {
+                    // Admin ise admin paneline git
+                    header("Location: ../admin/index.php");
+                } else {
+                    // Normal kullanıcı ise sitenin ana sayfasına git
+                    header("Location: ../index.php");
+                }
                 exit;
 
             } else {

@@ -280,15 +280,15 @@ function downloadSQLFile(){
 
 function uploadSqlFile(form){
     const f = form.querySelector('input[name="sql_file"]');
-    if(!f || !f.files || !f.files[0]){ alert('Lütfen bir .sql dosyası seçin'); return false; }
-    if (!confirm('Yükleme veritabanını değiştirecektir. Devam edilsin mi?')) return false;
+    if(!f || !f.files || !f.files[0]){ alert(window.lang?.select_sql_file || 'Please select a .sql file'); return false; }
+    if (!confirm(window.lang?.confirm_upload_db || 'This upload will MODIFY the database. Continue?')) return false;
 
     const fd = new FormData(form);
 
     fetch('verislem.php?action=import_file', { method: 'POST', body: fd })
         .then(r => r.json())
         .then(res => {
-            if (res.ok) { alert('Yükleme tamamlandı'); loadTables(); }
+            if (res.ok) { alert(window.lang?.upload_complete || 'Upload completed'); loadTables(); }
             else alert((window.lang?.errdata||'Error: ') + (res.error||''));
         })
         .catch(err => alert((window.lang?.errdata||'Error: ') + err));
@@ -313,8 +313,8 @@ function loadUsers(){
                     <td data-label="Tarih">${escapeHtml(u.created_at)}</td>
                     <td data-label="Durum">${u.is_active? (window.lang?.yes||'Yes') : (window.lang?.no||'No')}</td>
                     <td data-label="İşlem">
-                        <button class="btn btn-sm btn-primary" onclick="openUserModal(${u.id})">✏️</button>
-                        <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})">🗑</button>
+                        <button class="btn btn-sm btn-primary" onclick="openUserModal(${u.id})"> <i class="fas fa-edit"></i></button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})"> <i class="fas fa-trash"></i></button>
                     </td>
                 </tr>`;
             }).join('') || '<tr><td colspan="6">'+(window.lang?.no_data||'No data')+'</td></tr>';
@@ -445,8 +445,8 @@ const MenuEdit = {
         });
 
         btn.outerHTML = `
-            <button class="btn btn-success btn-sm" onclick="MenuEdit.save(this)">💾</button>
-            <button class="btn btn-secondary btn-sm" onclick="MenuEdit.cancel(this)">❌</button>
+            <button class="btn btn-success btn-sm" onclick="MenuEdit.save(this)"><i class="fas fa-save"></i></button>
+            <button class="btn btn-secondary btn-sm" onclick="MenuEdit.cancel(this)"><i class="fas fa-times"></i></button>
         `;
     },
 
@@ -507,7 +507,7 @@ document.addEventListener('DOMContentLoaded', function(){
             fetch('modul-func.php', { method: 'POST', body: fd })
             .then(r => r.json())
             .then(res => {
-                alert(res.message);
+                alert(window.lang?.[res.message_key] || res.message || window.lang?.updatelang || res.status);
                 if (res.status === 'success') location.reload();
             });
         });
@@ -517,7 +517,7 @@ document.addEventListener('DOMContentLoaded', function(){
         const toggleBtn = e.target.closest('.toggle-module-btn');
         if (toggleBtn) {
             const id = toggleBtn.dataset.id;
-            if (!confirm(toggleBtn.dataset.active === '1' ? 'Bu modülü devre dışı bırakmak istiyor musunuz?' : 'Bu modülü etkinleştirmek istiyor musunuz?')) return;
+            if (!confirm(toggleBtn.dataset.active === '1' ? (window.lang?.confirm_disable_module || 'Disable module?') : (window.lang?.confirm_enable_module || 'Enable module?'))) return;
 
             fetch('modul-func.php', {
                 method: 'POST',
@@ -525,13 +525,13 @@ document.addEventListener('DOMContentLoaded', function(){
             })
             .then(r => r.json())
             .then(res => {
-                alert(res.message);
+                alert(window.lang?.[res.message_key] || res.message || window.lang?.updatelang || res.status);
                 if (res.status === 'success') {
                     const tr = toggleBtn.closest('tr');
                     const statusCell = tr.querySelector('.module-status');
                     if (statusCell) statusCell.innerHTML = res.is_active ? '<span lang="active"></span>' : '<span lang="passive"></span>';
                     toggleBtn.dataset.active = res.is_active ? '1' : '0';
-                    toggleBtn.textContent = res.is_active ? 'Devre Dışı Bırak' : 'Etkinleştir';
+                    toggleBtn.textContent = res.is_active ? (window.lang?.disable_module || 'Disable') : (window.lang?.enable_module || 'Enable');
                 }
             });
 
@@ -541,7 +541,7 @@ document.addEventListener('DOMContentLoaded', function(){
         const btn = e.target.closest('.delete-module-btn');
         if (!btn) return;
 
-        if (!confirm('Bu modülü silmek istediğine emin misin?')) return;
+        if (!confirm(window.lang?.confirm_module_delete || 'Are you sure?')) return;
 
         fetch('modul-func.php', {
             method: 'POST',
@@ -549,7 +549,7 @@ document.addEventListener('DOMContentLoaded', function(){
         })
         .then(r => r.json())
         .then(res => {
-            alert(res.message);
+            alert(window.lang?.[res.message_key] || res.message || window.lang?.updatelang || res.status);
             location.reload();
         });
     });

@@ -4,7 +4,7 @@ require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/db.php';
 
 /* ============================
-   ✅ MODÜLLERİ ÇEK
+    MODÜLLERİ ÇEK
 ============================ */
 try {
     $modules = $db->query("SELECT * FROM modules")->fetchAll(PDO::FETCH_ASSOC);
@@ -15,9 +15,9 @@ try {
 
 <div class="modules-panel container">
 
-    <h4 class="mb-3">🧩 <span lang="module_management"></span></h4>
+    <h4 class="mb-3"><i class="fas fa-puzzle-piece"></i> <span lang="module_management"></span></h4>
 
-    <!-- ✅ MODÜL YÜKLEME -->
+    <!--  MODÜL YÜKLEME -->
     <form id="uploadModuleForm" enctype="multipart/form-data" action="modul-func.php" method="post">
         <input type="hidden" name="action" value="upload">
 
@@ -30,7 +30,7 @@ try {
 
     <hr>
 
-    <!-- ✅ MODÜL LİSTESİ -->
+    <!--  MODÜL LİSTESİ -->
     <table class="table table-bordered mt-3">
         <thead>
             <tr>
@@ -54,10 +54,14 @@ try {
                 <td data-label="Slug"><?= htmlspecialchars($m['page_slug']) ?></td>
                 <td class="module-status" data-label="Durum"><?= $m['is_active'] ? '<span lang="active"></span>' : '<span lang="passive"></span>' ?></td>
                 <td data-label="">
-                    <button class="btn btn-sm btn-secondary toggle-module-btn"
-                            data-id="<?= $m['id'] ?>" data-active="<?= $m['is_active'] ? '1' : '0' ?>">
-                        <?= $m['is_active'] ? 'Devre Dışı Bırak' : 'Etkinleştir' ?>
-                    </button>
+                        <button class="btn btn-sm btn-secondary toggle-module-btn"
+                                data-id="<?= $m['id'] ?>" data-active="<?= $m['is_active'] ? '1' : '0' ?>">
+                            <?php if ($m['is_active']): ?>
+                                <span lang="disable_module"></span>
+                            <?php else: ?>
+                                <span lang="enable_module"></span>
+                            <?php endif; ?>
+                        </button>
 
                     <button class="btn btn-sm btn-danger delete-module-btn"
                             data-id="<?= $m['id'] ?>" lang="delete"></button>

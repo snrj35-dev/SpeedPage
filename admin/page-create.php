@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $file = SAYFALAR_DIR . "$slug.php";
 
     if (file_exists($file)) {
-        echo "❌ Bu sayfa zaten var";
+        echo "❌ <span lang=\"page_exists\"></span>";
         exit;
     }
 
@@ -88,15 +88,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        echo "✅ Sayfa başarıyla oluşturuldu";
+        echo "✅ <span lang=\"page_created\"></span>";
 
     } catch (Exception $e) {
-        echo "❌ Sayfa oluşturuldu fakat DB kaydı başarısız: " . $e->getMessage();
+        echo "❌ <span lang=\"page_db_error\"></span>";
     }
 
     exit;
 }
 
-echo "❌ Geçersiz istek";
+echo "❌ <span lang=\"invalid_request\"></span>";
 exit;
 

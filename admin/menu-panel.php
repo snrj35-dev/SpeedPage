@@ -5,14 +5,14 @@ require_once __DIR__ . '/db.php';
 
 
 /* ============================
-   ✅ AJAX İŞLEMLERİ
+    AJAX İŞLEMLERİ
 ============================ */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header("Content-Type: application/json; charset=utf-8");
 
     $action = $_POST['action'] ?? '';
 
-    /* ✅ ADD */
+    /*  ADD */
     if ($action === 'add') {
 
         $page_id = trim($_POST['page_id']) === "" ? null : (int)$_POST['page_id'];
@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $menu_id = $db->lastInsertId();
 
-        // ✅ Locations
+        //  Locations
         if (!empty($_POST['locations'])) {
             foreach ($_POST['locations'] as $loc) {
                 $loc = preg_replace('/[^a-z0-9_-]/', '', $loc);
@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    /* ✅ UPDATE */
+    /*  UPDATE */
     if ($action === 'update') {
 
         $id = (int)$_POST['id'];
@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->prepare($sql)->execute($values);
         }
 
-        // ✅ Locations
+        //  Locations
         if (isset($_POST['locations'])) {
             $db->prepare("DELETE FROM menu_locations WHERE menu_id=?")->execute([$id]);
 
@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    /* ✅ DELETE */
+    /*  DELETE */
     if ($action === 'delete') {
         $id = (int)$_POST['id'];
 
@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 /* ============================
-   ✅ LİSTELER
+    LİSTELER
 ============================ */
 $pages = $db->query("SELECT id, slug FROM pages ORDER BY slug")->fetchAll();
 
@@ -123,10 +123,10 @@ foreach ($locRows as $r) {
 }
 ?>
 
-<h4 class="mb-3">📋 <span lang="menu_management"></span></h4>
+<h4 class="mb-3"><i class="fas fa-clipboard-list"></i> <span lang="menu_management"></span></h4>
 
 <div class="card p-3 mb-4">
-    <h5>➕ <span lang="add"></span></h5>
+    <h5><i class="fas fa-plus"></i> <span lang="add"></span></h5>
 
     <div class="row g-2">
         <div class="col">
@@ -151,10 +151,10 @@ foreach ($locRows as $r) {
         </div>
         <div class="col">
             <select id="m_locations" class="form-select" multiple>
-                <option value="navbar">Navbar</option>
-                <option value="footer">Footer</option>
-                <option value="sidebar">Sidebar</option>
-                <option value="home">Home</option>
+                <option value="navbar" lang="navbar"></option>
+                <option value="footer" lang="footer"></option>
+                <option value="sidebar" lang="sidebar"></option>
+                <option value="home" lang="home"></option>
             </select>
         </div>
         <div class="col">
@@ -187,8 +187,8 @@ foreach ($locRows as $r) {
             value="<?= htmlspecialchars($m['external_url']) ?>" data-placeholder="external_url_placeholder" disabled>
 
     <select class="form-select"  data-field="aktif" disabled>
-        <option value="1" <?= $m['is_active']?'selected':'' ?>>Aktif</option>
-        <option value="0" <?= !$m['is_active']?'selected':'' ?>>Pasif</option>
+        <option value="1" <?= $m['is_active']?'selected':'' ?> lang="active"></option>
+        <option value="0" <?= !$m['is_active']?'selected':'' ?> lang="passive"></option>
     </select>
 
     <select class="form-select"  data-field="locations" multiple disabled>
@@ -200,8 +200,8 @@ foreach ($locRows as $r) {
         <?php endforeach; ?>
     </select>
 
-    <button class="btn btn-primary btn-sm" onclick="MenuEdit.edit(this)">✏️</button>
-    <button class="btn btn-danger btn-sm" onclick="MenuEdit.del(<?= $m['id'] ?>)">🗑</button>
+    <button class="btn btn-primary btn-sm" onclick="MenuEdit.edit(this)"><i class="fas fa-edit"></i></button>
+    <button class="btn btn-danger btn-sm" onclick="MenuEdit.del(<?= $m['id'] ?>)"><i class="fas fa-trash"></i></button>
 
 </div>
 <?php endforeach; ?>

@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $file = SAYFALAR_DIR . "$slug.php";
 
     if (!file_exists($file)) {
-        echo json_encode(['error' => 'PAGE_NOT_FOUND']);
+        echo json_encode(['error' => 'PAGE_NOT_FOUND', 'message_key' => 'ersayfa2']);
         exit;
     }
 
@@ -25,7 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $page = $stmt->fetch();
 
     if (!$page) {
-        echo json_encode(['error' => 'PAGE_META_NOT_FOUND']);
+        echo json_encode(['error' => 'PAGE_META_NOT_FOUND', 'message_key' => 'ersayfa']);
         exit;
     }
 
@@ -133,6 +133,6 @@ try {
     echo json_encode(['success' => true]);
 
 } catch (Exception $e) {
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => $e->getMessage(), 'message_key' => 'errdata']);
 }
 

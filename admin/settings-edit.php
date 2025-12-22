@@ -14,6 +14,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     'site_slogan'          => '',
     'meta_description'     => '',
     'logo_url'             => '',
+    'allow_username_change' => '0',
+    'allow_password_change' => '0',
 ];
 
 
@@ -36,7 +38,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     } catch (Exception $e) {
         $db->rollBack();
-        die("Hata oluştu: " . $e->getMessage());
+        die('<div class="alert alert-danger small"><span lang="errdata"></span></div>');
     }
 } else {
     header("Location: index.php");

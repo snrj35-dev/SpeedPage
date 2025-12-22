@@ -71,10 +71,10 @@ if (!empty($_GET['page'])) { $pageTitle .= " | " . ucfirst($_GET['page']); }
 
    <?php if (empty($_SESSION['user_id'])): ?> 
     <!-- Login --> 
-     <a href="<?= BASE_URL ?>php/login.php" class="btn btn-outline-primary btn-sm"> Giriş Yap </a>
+     <a href="<?= BASE_URL ?>php/login.php" class="btn btn-outline-primary btn-sm"><span lang="login"></span></a>
     <!-- Register --> 
     <?php if (!empty($settings['registration_enabled']) && $settings['registration_enabled'] == '1'): ?>
-        <a href="<?= BASE_URL ?>php/register.php" class="btn btn-primary btn-sm"> Kayıt Ol </a> 
+        <a href="<?= BASE_URL ?>php/register.php" class="btn btn-primary btn-sm"><span lang="create_account"></span></a> 
     <?php endif; ?> 
     <?php else: ?> 
     <?php 
@@ -82,13 +82,44 @@ if (!empty($_GET['page'])) { $pageTitle .= " | " . ucfirst($_GET['page']); }
         $displayName = 'Kullanıcı'; 
         if (!empty($_SESSION['username'])) { $displayName = $_SESSION['username']; } 
         elseif (!empty($_SESSION['name'])) { $displayName = $_SESSION['name']; } 
-        elseif (!empty($_SESSION['email'])) { $displayName = $_SESSION['email']; } ?> 
-        <span class="me-2 fw-bold"> <?= htmlspecialchars($displayName) ?> </span> 
-        <a href="<?= BASE_URL ?>php/logout.php" class="btn btn-danger btn-sm"> Çıkış </a>
-    <?php endif; ?>
+        elseif (!empty($_SESSION['email'])) { $displayName = $_SESSION['email']; } 
+        // Veritabanından güncel kullanıcı bilgilerini çekelim
+        $userQuery = $db->prepare("SELECT display_name, username, avatar_url FROM users WHERE id = ?");
+        $userQuery->execute([$_SESSION['user_id']]);
+        $currentUser = $userQuery->fetch();
 
+        // Görünen isim önceliği: display_name > username > 'Kullanıcı'
+        $finalName = $currentUser['display_name'] ?: ($currentUser['username'] ?: 'Kullanıcı');
+        $finalAvatar = $currentUser['avatar_url'] ?: 'fa-user';
+        
+        
+        ?> 
+        <div class="user-profile-nav d-flex align-items-center">
+        <a href="<?= BASE_URL ?>php/profile.php?id=<?= $_SESSION['user_id'] ?>" 
+           class="d-flex align-items-center text-decoration-none me-3 transition-hover">
+            
+            <div class="nav-avatar-circle bg-primary text-white d-flex align-items-center justify-content-center me-2 shadow-sm" 
+                 style="width: 35px; height: 35px; border-radius: 50%; font-size: 14px;">
+                <i class="fas <?= htmlspecialchars($finalAvatar) ?>"></i>
+            </div>
+            
+            <span class="fw-bold text-light d-none d-sm-inline"> 
+                <?= htmlspecialchars($finalName) ?> 
+            </span>
+        </a>
+        <?php if ($_SESSION['role'] === 'admin'): ?>
+            <a href="<?= BASE_URL ?>admin/index.php" class="btn btn-warning btn-sm px-3 rounded-pill me-2 shadow-sm" title="Yönetim Paneli">
+                <i class="fa-solid fa-gauge-high"></i>
+                <span class="visually-hidden" lang="admin_panel"></span>
+            </a>
+        <?php endif; ?>
+        <a href="<?= BASE_URL ?>php/logout.php" class="btn btn-outline-danger btn-sm px-3 rounded-pill">
+            <i class="fa-solid fa-right-from-bracket"></i>
+        </a>
+    </div>
+    <?php endif; ?>
     <!-- Tema butonu -->
-    <button id="theme-toggle" onclick="toggleTheme()">🌙</button>
+    <button id="theme-toggle" onclick="toggleTheme()"><i class="fas fa-moon"></i></button>
 
     <!-- Dil seçimi -->
     <select id="lang-select">
@@ -144,7 +175,7 @@ $logo = trim($settings['logo_url'] ?? '');
     <div id="page-content"></div>
 </main>
 <footer class="copyrightnote">
-    SpeedPage 0.1 Alpha
+    <span lang="site_version">SpeedPage 0.1 Alpha</span>
 </footer>
 
 <script src="<?= CDN_URL ?>js/router.js"></script>

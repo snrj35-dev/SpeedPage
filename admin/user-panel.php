@@ -6,7 +6,7 @@ require_once __DIR__ . '/db.php';
 ?>
 
 <div class="user-panel">
-    <h4 class="mb-3">👥 <span lang="users"></span></h4>
+    <h4 class="mb-3"><i class="fas fa-users"></i> <span lang="users"></span></h4>
 
     <div class="mb-3 d-flex gap-2">
         <button class="btn btn-success" id="addUserBtn"><i class="fa fa-plus"></i> <span lang="add_user"></span></button>
@@ -77,10 +77,10 @@ require_once __DIR__ . '/db.php';
 
             </form>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" lang="cancel"></button>
-            <button type="button" class="btn btn-primary" id="saveUserBtn" lang="save_changes"></button>
-          </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" lang="cancel"></button>
+                        <button type="button" class="btn btn-primary" id="saveUserBtn" lang="save_changes"></button>
+                    </div>
         </div>
       </div>
     </div>

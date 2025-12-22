@@ -4,7 +4,7 @@ require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/db.php';
 
 /* ============================
-   ✅ SAYFA LİSTESİ
+  SAYFA LİSTESİ
 ============================ */
 try {
     $pages = $db->query("SELECT * FROM pages ORDER BY sort_order, slug")->fetchAll(PDO::FETCH_ASSOC);
@@ -15,9 +15,9 @@ try {
 
 <div class="page-panel">
 
-<!-- 📄 SAYFA LİSTESİ -->
+<!--  SAYFA LİSTESİ -->
 <div class="card p-3 mb-4">
-    <h4 class="mb-3">📄 <span lang="pages"></span></h4>
+    <h4 class="mb-3"> <i class="fas fa-file-alt"></i> <span lang="pages"></span> </h4>
 
     <table class="table table-hover align-middle">
         <thead>
@@ -49,12 +49,12 @@ try {
                 <td data-label="">
                     <button class="btn btn-sm btn-primary edit-btn"
                             data-slug="<?= htmlspecialchars($slug) ?>">
-                        ✏️ <span lang="edit_page"></span>
+                        <i class="fas fa-edit"></i> <span lang="edit_page"></span>
                     </button>
 
                     <button class="btn btn-sm btn-danger delete-btn"
                             data-slug="<?= htmlspecialchars($slug) ?>">
-                        🗑 <span lang="delete_page"></span>
+                        <i class="fas fa-trash"></i> <span lang="delete_page"></span>
                     </button>
                 </td>
             </tr>
@@ -63,7 +63,7 @@ try {
     </table>
 </div>
 
-<!-- ➕ YENİ SAYFA OLUŞTUR -->
+<!-- YENİ SAYFA OLUŞTUR -->
 <div class="card p-3">
     <h4 class="mb-3" lang="new_create_page"></h4>
 
@@ -116,7 +116,7 @@ try {
             </textarea>
         </div>
 
-        <!-- ✅ Yeni menü sistemi -->
+        <!-- Yeni menü sistemi -->
         <div class="mb-3 border p-3">
             <div class="form-check">
                 <input class="form-check-input" type="checkbox" value="1" id="addToMenu" name="add_to_menu">
@@ -136,10 +136,10 @@ try {
 
                 <label class="form-label" lang="menu_locations"></label>
                 <select name="menu_locations[]" class="form-select" multiple>
-                    <option value="navbar">Navbar</option>
-                    <option value="footer">Footer</option>
-                    <option value="sidebar">Sidebar</option>
-                    <option value="home">Home</option>
+                    <option value="navbar" lang="navbar"></option>
+                    <option value="footer" lang="footer"></option>
+                    <option value="sidebar" lang="sidebar"></option>
+                    <option value="home" lang="home"></option>
                 </select>
             </div>
         </div>
