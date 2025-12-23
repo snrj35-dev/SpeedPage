@@ -21,7 +21,7 @@ $userQuery = $db->prepare("SELECT display_name, username, avatar_url FROM users 
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><span lang="page_title"></span></title>
+    <title lang="page_title"></title>
     <link rel="stylesheet" href="<?= CDN_URL ?>css/bootstrap.min.css">
     <link rel="stylesheet" href="<?= CDN_URL ?>css/all.min.css">
     <link rel="stylesheet" href="<?= CDN_URL ?>css/style.css">
@@ -40,7 +40,7 @@ $userQuery = $db->prepare("SELECT display_name, username, avatar_url FROM users 
                 <i class="fas <?= htmlspecialchars($finalAvatar) ?>"></i>
             </div>
             
-            <span class="fw-bold text-light d-none d-sm-inline"> 
+            <span class="fw-bold text d-none d-sm-inline"> 
                 <?= htmlspecialchars($finalName) ?> 
             </span>
         </a>
