@@ -103,7 +103,7 @@ if (!empty($_GET['page'])) { $pageTitle .= " | " . ucfirst($_GET['page']); }
                 <i class="fas <?= htmlspecialchars($finalAvatar) ?>"></i>
             </div>
             
-            <span class="fw-bold text-light d-none d-sm-inline"> 
+            <span class="fw-bold text d-none d-sm-inline"> 
                 <?= htmlspecialchars($finalName) ?> 
             </span>
         </a>
