@@ -1,4 +1,4 @@
-const CACHE_NAME = "speedpage-cache-v2";
+const CACHE_NAME = "speedpage-cache-v1";
 
 const BASE_PATH = "/"; // settings.php ile aynı olmalı
 

@@ -20,6 +20,7 @@
   "create_page": "Sayfa Oluştur",
   "createlang": "Oluştur",
   "created_at": "Oluşturulma",
+  "displaypage":"Görünüm",
   "cssedit": "CSS (virgülle)",
   "current_password_label": "Mevcut Şifreniz",
   "current_password_placeholder": "Doğrulama için gereklidir",
@@ -61,6 +62,7 @@
   "invalid_current_password": "Mevcut şifreniz hatalı. Güvenlik nedeniyle şifre değiştirilemedi.",
   "invalid_request": "Geçersiz istek",
   "jsedit": "JS (virgülle)",
+  "pageislem": "İşlemler",
   "language_selector_label": "Dil:",
   "login": "Giriş Yap",
   "login_button": "Giriş Yap",
@@ -97,6 +99,10 @@
   "page_title": "SpeedPage Admin",
   "pagedel": "Bu sayfa silinsin mi?",
   "pages": "Sayfalar",
+  "pageslist": "Mevcut Sayfalar",
+  "pagegenel": "Genel",
+  "pagetasarim": "Tasarım",
+  "pagemenu": "Menü",
   "passive": "Pasif",
   "password": "Parola",
   "password_change_disabled": "Şifre değiştirme yetkisi yönetici tarafından kapatılmıştır.",
@@ -116,6 +122,7 @@
   "run_sql": "Çalıştır",
   "run_sql_button": "Çalıştır",
   "save_changes": "Değişiklikleri Kaydet",
+  "save": "Kaydet",
   "savelang": "Kaydet",
   "security_settings": "GÜVENLİK AYARLARI",
   "select_page_placeholder": "— Sayfa Seç —",
@@ -184,8 +191,30 @@
 
   "password_change": "Şifre Değişikliği",
   "password_change_desc": "Kullanıcıların profil sayfasından şifrelerini güncellenmesine izin ver.",
+  "apply_changes": "Değişiklikleri Uygula",
+  "filebrowser": "Dosya Gezgini",
+  "br_download": "İndir",
+  "br_unzip": "Buraya Çıkar",
+  "br_rename": "Ad Değiştir",
+  "br_delete": "Sil",
+  "br_empty": "Bu klasör boş.",
+  "br_confirm_delete": "Bu öğeyi silmek istediğinize emin misiniz?",
+  "br_saved": "Dosya başarıyla kaydedildi!",
+  "br_upload_btn": "Yükle",
+  "br_new_file": "Yeni Dosya",
+  "br_new_folder": "Yeni Klasör",
 
-  "apply_changes": "Değişiklikleri Uygula"
-
+  "system": "Sistem Paneli",
+  "php_logs": "PHP Logları",
+  "no_logs": "Log bulunamadı veya erişim yok",
+  "active_visitors": "Aktif Ziyaretçiler",
+  "file_permissions": "Dosya İzinleri",
+  "php_ini_settings": "PHP.ini Ayarları",
+  "php_extensions": "PHP Eklentileri",
+  "databases": "Veritabanları",
+  "apache_modules": "Apache Modülleri"
 
 }
+
+
+

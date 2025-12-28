@@ -18,10 +18,8 @@ function getMenus(string $location = 'home'): array
               AND ml.location = ?
             ORDER BY m.sort_order ASC
         ");
-
         $stmt->execute([$location]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
-
     } catch (Throwable $e) {
         return [];
     }

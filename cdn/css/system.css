@@ -1,0 +1,17 @@
+#widgets div.card, .card-body {
+  background: #020617;
+  border: 1px solid #16191e;
+  border-radius: 8px;
+  overflow: hidden;
+  color: #b57055;
+}
+
+#widgets.progress{height:8px}
+
+.accordion-item{
+  background: #020617;
+  border: 1px solid #16191e;
+}
+    .accordion-button {
+  background: #020617;color: #b57055;
+}

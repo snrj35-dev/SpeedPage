@@ -175,7 +175,7 @@ $logo = trim($settings['logo_url'] ?? '');
     <div id="page-content"></div>
 </main>
 <footer class="copyrightnote">
-    <span lang="site_version">SpeedPage 0.1 Alpha</span>
+    <span lang="site_version"></span>
 </footer>
 
 <script src="<?= CDN_URL ?>js/router.js"></script>

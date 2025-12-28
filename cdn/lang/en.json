@@ -185,5 +185,27 @@
   "password_change": "Password Change",
   "password_change_desc": "Allow users to update their passwords from the profile page.",
 
-  "apply_changes": "Apply Changes"
+  "apply_changes": "Apply Changes",
+  "filebrowser": "File Explorer",
+  "br_download": "Download",
+  "br_unzip": "Extract Here",
+  "br_rename": "Rename",
+  "br_delete": "Delete",
+  "br_empty": "This folder is empty.",
+  "br_confirm_delete": "Are you sure you want to delete this item?",
+  "br_saved": "File saved successfully!",
+  "br_upload_btn": "Upload",
+  "br_new_file": "New File",
+  "br_new_folder": "New Folder",
+  "system": "System Panel",
+  "php_logs": "PHP Logs",
+  "no_logs": "No logs found or no access",
+  "active_visitors": "Active Visitors",
+  "file_permissions": "File Permissions",
+  "php_ini_settings": "PHP.ini Settings",
+  "php_extensions": "PHP Extensions",
+  "databases": "Databases",
+  "apache_modules": "Apache Modules"
 }
+
+

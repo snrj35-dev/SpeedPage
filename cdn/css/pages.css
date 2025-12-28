@@ -1,0 +1,20 @@
+    :root { --admin-primary: #4e73df; --admin-bg: #f8f9fc; }
+   .table thead th { background: #f8f9fc; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.05em; color: #4e73df; }
+    .btn-action { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; margin: 0 2px; }
+    .nav-pills .nav-link.active { background-color: var(--admin-primary); }
+    .form-label { font-weight: 600; color: #4e73df; font-size: 0.9rem; }
+    .badge-active { background-color: #1cc88a; color: white; padding: 5px 10px; border-radius: 20px; font-size: 0.75rem; }
+    .badge-passive { background-color: #858796; color: white; padding: 5px 10px; border-radius: 20px; font-size: 0.75rem; }
+    .menu-box { border: 1px dashed #d1d3e2; border-radius: 10px; }
+    /* Collapse animasyonunu daha akıcı yapar */
+#newSection.collapsing {
+    transition: height 0.35s ease-in-out;
+}
+.card, .card-body{
+  padding: 0;
+  border-radius: 0 0 8px 8px;
+}
+.tab-pane{
+  border-radius: 0px;
+  padding: 5px;
+}

@@ -1,7 +1,7 @@
 {
-  "name": "Dağtan Merkezi",
-  "short_name": "Dağtan Merkez",
-  "description": "Yerel ağ merkezi yönetim paneli",
+  "name": "Local Center",
+  "short_name": "Local Center",
+  "description": "Local network center management panel",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
