@@ -3,25 +3,25 @@
    modules.js
 ============================ */
 
-document.addEventListener('DOMContentLoaded', function(){
+document.addEventListener('DOMContentLoaded', function () {
     // Modül yükleme formu
     const uploadForm = document.getElementById('uploadModuleForm');
     if (uploadForm) {
-        uploadForm.addEventListener('submit', function(e){
+        uploadForm.addEventListener('submit', function (e) {
             e.preventDefault();
             const fd = new FormData(uploadForm);
 
             fetch('modul-func.php', { method: 'POST', body: fd })
-            .then(r => r.json())
-            .then(res => {
-                alert(window.lang?.[res.message_key] || res.message || window.lang?.updatelang || res.status);
-                if (res.status === 'success') location.reload();
-            });
+                .then(r => r.json())
+                .then(res => {
+                    alert(window.lang?.[res.message_key] || res.message || window.lang?.updatelang || res.status);
+                    if (res.status === 'success') location.reload();
+                });
         });
     }
 
     // Modül toggle / silme işlemleri
-    document.body.addEventListener('click', function(e){
+    document.body.addEventListener('click', function (e) {
         const toggleBtn = e.target.closest('.toggle-module-btn');
         if (toggleBtn) {
             const id = toggleBtn.dataset.id;
@@ -33,25 +33,25 @@ document.addEventListener('DOMContentLoaded', function(){
 
             fetch('modul-func.php', {
                 method: 'POST',
-                body: new URLSearchParams({ action: 'toggle', id })
+                body: new URLSearchParams({ action: 'toggle', id, csrf: CSRF_TOKEN })
             })
-            .then(r => r.json())
-            .then(res => {
-                alert(window.lang?.[res.message_key] || res.message || window.lang?.updatelang || res.status);
-                if (res.status === 'success') {
-                    const tr = toggleBtn.closest('tr');
-                    const statusCell = tr.querySelector('.module-status');
-                    if (statusCell) {
-                        statusCell.innerHTML = res.is_active
-                            ? '<span lang="active"></span>'
-                            : '<span lang="passive"></span>';
+                .then(r => r.json())
+                .then(res => {
+                    alert(window.lang?.[res.message_key] || res.message || window.lang?.updatelang || res.status);
+                    if (res.status === 'success') {
+                        const tr = toggleBtn.closest('tr');
+                        const statusCell = tr.querySelector('.module-status');
+                        if (statusCell) {
+                            statusCell.innerHTML = res.is_active
+                                ? '<span lang="active"></span>'
+                                : '<span lang="passive"></span>';
+                        }
+                        toggleBtn.dataset.active = res.is_active ? '1' : '0';
+                        toggleBtn.textContent = res.is_active
+                            ? (window.lang?.disable_module || 'Disable')
+                            : (window.lang?.enable_module || 'Enable');
                     }
-                    toggleBtn.dataset.active = res.is_active ? '1' : '0';
-                    toggleBtn.textContent = res.is_active
-                        ? (window.lang?.disable_module || 'Disable')
-                        : (window.lang?.enable_module || 'Enable');
-                }
-            });
+                });
 
             return;
         }
@@ -63,12 +63,12 @@ document.addEventListener('DOMContentLoaded', function(){
 
         fetch('modul-func.php', {
             method: 'POST',
-            body: new URLSearchParams({ action: 'delete', id: btn.dataset.id })
+            body: new URLSearchParams({ action: 'delete', id: btn.dataset.id, csrf: CSRF_TOKEN })
         })
-        .then(r => r.json())
-        .then(res => {
-            alert(window.lang?.[res.message_key] || res.message || window.lang?.updatelang || res.status);
-            location.reload();
-        });
+            .then(r => r.json())
+            .then(res => {
+                alert(window.lang?.[res.message_key] || res.message || window.lang?.updatelang || res.status);
+                location.reload();
+            });
     });
 });

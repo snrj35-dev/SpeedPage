@@ -4,12 +4,12 @@
 // 1. URL Tabanlı Ayarlar (Tarayıcı için)
 // ---------------------------------------------
 
-define('BASE_PATH', '/'); 
+define('BASE_PATH', '/');
 
 // Tam Site URL'si (Dil dosyalarını çekerken işimize yarar)
 // Bu kısım genellikle otomatik belirlenir, ancak basitlik için elle ayarlayabiliriz:
 // Not: http veya https'i buradan yönetmek daha temizdir.
-define('BASE_URL', 'http://localhost' . BASE_PATH); 
+define('BASE_URL', 'http://localhost' . BASE_PATH);
 
 // CDN yolu
 define('CDN_URL', BASE_URL . 'cdn/');
@@ -36,5 +36,14 @@ if (!defined('DB_PATH')) {
 	define('DB_PATH', ROOT_DIR . 'admin/veritabanı/data.db');
 }
 
-?>
+// Helper XSS function
+if (!function_exists('e')) {
+	function e($str)
+	{
+		if ($str === null)
+			return '';
+		return htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
+	}
+}
 
+?>

@@ -19,6 +19,7 @@ try {
 
     <!--  MODÜL YÜKLEME -->
     <form id="uploadModuleForm" enctype="multipart/form-data" action="modul-func.php" method="post">
+        <input type="hidden" name="csrf" value="<?= $_SESSION['csrf'] ?>">
         <input type="hidden" name="action" value="upload">
 
         <div class="mb-2">
@@ -45,17 +46,18 @@ try {
         </thead>
 
         <tbody>
-            <?php foreach($modules as $m): ?>
-            <tr>
-                <td data-label="ID"><?= $m['id'] ?></td>
-                <td data-label="İsim"><?= htmlspecialchars($m['name']) ?></td>
-                <td data-label="Başlık"><?= htmlspecialchars($m['title']) ?></td>
-                <td data-label="Açıklama"><?= htmlspecialchars($m['description']) ?></td>
-                <td data-label="Slug"><?= htmlspecialchars($m['page_slug']) ?></td>
-                <td class="module-status" data-label="Durum"><?= $m['is_active'] ? '<span lang="active"></span>' : '<span lang="passive"></span>' ?></td>
-                <td data-label="">
-                        <button class="btn btn-sm btn-secondary toggle-module-btn"
-                                data-id="<?= $m['id'] ?>" data-active="<?= $m['is_active'] ? '1' : '0' ?>">
+            <?php foreach ($modules as $m): ?>
+                <tr>
+                    <td data-label="ID"><?= e($m['id']) ?></td>
+                    <td data-label="İsim"><?= e($m['name']) ?></td>
+                    <td data-label="Başlık"><?= e($m['title']) ?></td>
+                    <td data-label="Açıklama"><?= e($m['description']) ?></td>
+                    <td data-label="Slug"><?= e($m['page_slug']) ?></td>
+                    <td class="module-status" data-label="Durum">
+                        <?= $m['is_active'] ? '<span lang="active"></span>' : '<span lang="passive"></span>' ?></td>
+                    <td data-label="">
+                        <button class="btn btn-sm btn-secondary toggle-module-btn" data-id="<?= e($m['id']) ?>"
+                            data-active="<?= $m['is_active'] ? '1' : '0' ?>">
                             <?php if ($m['is_active']): ?>
                                 <span lang="disable_module"></span>
                             <?php else: ?>
@@ -63,13 +65,12 @@ try {
                             <?php endif; ?>
                         </button>
 
-                    <button class="btn btn-sm btn-danger delete-module-btn"
-                            data-id="<?= $m['id'] ?>" lang="delete"></button>
-                </td>
-            </tr>
+                        <button class="btn btn-sm btn-danger delete-module-btn" data-id="<?= e($m['id']) ?>"
+                            lang="delete"></button>
+                    </td>
+                </tr>
             <?php endforeach; ?>
         </tbody>
     </table>
 
 </div>
-

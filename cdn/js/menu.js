@@ -14,6 +14,7 @@ const MenuEdit = {
         params.append("page_id", m_page.value || "");
         params.append("external_url", m_url.value.trim());
         params.append("order_no", m_order.value);
+        params.append("csrf", CSRF_TOKEN); // Add CSRF
 
         // Çoklu konum
         Array.from(document.getElementById('m_locations').selectedOptions)
@@ -30,7 +31,7 @@ const MenuEdit = {
 
         fetch("menu-panel.php", {
             method: "POST",
-            body: new URLSearchParams({ action: "delete", id })
+            body: new URLSearchParams({ action: "delete", id, csrf: CSRF_TOKEN })
         }).then(() => location.reload());
     },
 
@@ -71,6 +72,7 @@ const MenuEdit = {
         const params = new URLSearchParams();
         params.append("action", "update");
         params.append("id", id);
+        params.append("csrf", CSRF_TOKEN);
 
         // Tüm alanları POST et
         row.querySelectorAll('[data-field]').forEach(i => {

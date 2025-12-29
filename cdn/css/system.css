@@ -1,17 +1,27 @@
 #widgets div.card, .card-body {
-  background: #020617;
-  border: 1px solid #16191e;
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
-  color: #b57055;
+  color: var(--text);
 }
 
 #widgets.progress{height:8px}
 
 .accordion-item{
-  background: #020617;
-  border: 1px solid #16191e;
+  background: var(--card);
+  border: 1px solid var(--border);
 }
-    .accordion-button {
-  background: #020617;color: #b57055;
+
+.accordion-button {
+  background: var(--card);
+  color: var(--text);
+  box-shadow: none;
+}
+.accordion-button:not(.collapsed) {
+    background: var(--bg);
+    color: var(--primary);
+}
+.accordion-body {
+    background: var(--bg-soft);
 }

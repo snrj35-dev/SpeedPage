@@ -12,14 +12,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = $_POST['action'] ?? '';
 
+    // CSRF Check
+    if (!isset($_POST['csrf']) || $_POST['csrf'] !== $_SESSION['csrf']) {
+        echo json_encode(['ok' => false, 'error' => 'CSRF verification failed']);
+        exit;
+    }
+
     /*  ADD */
     if ($action === 'add') {
 
-        $page_id = trim($_POST['page_id']) === "" ? null : (int)$_POST['page_id'];
-        $title   = trim($_POST['title']);
-        $icon    = trim($_POST['icon']);
-        $url     = trim($_POST['external_url']) ?: null;
-        $order   = (int)$_POST['order_no'];
+        $page_id = trim($_POST['page_id']) === "" ? null : (int) $_POST['page_id'];
+        $title = trim($_POST['title']);
+        $icon = trim($_POST['icon']);
+        $url = trim($_POST['external_url']) ?: null;
+        $order = (int) $_POST['order_no'];
 
         $stmt = $db->prepare("
             INSERT INTO menus (page_id, title, icon, sort_order, is_active, external_url)
@@ -34,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($_POST['locations'] as $loc) {
                 $loc = preg_replace('/[^a-z0-9_-]/', '', $loc);
                 $db->prepare("INSERT INTO menu_locations (menu_id, location) VALUES (?,?)")
-                   ->execute([$menu_id, $loc]);
+                    ->execute([$menu_id, $loc]);
             }
         }
 
@@ -45,18 +51,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     /*  UPDATE */
     if ($action === 'update') {
 
-        $id = (int)$_POST['id'];
+        $id = (int) $_POST['id'];
 
         $fields = [];
         $values = [];
 
         $map = [
-            'title'        => 'title',
-            'icon'         => 'icon',
-            'order_no'     => 'sort_order',
+            'title' => 'title',
+            'icon' => 'icon',
+            'order_no' => 'sort_order',
             'external_url' => 'external_url',
-            'page_id'      => 'page_id',
-            'aktif'        => 'is_active'
+            'page_id' => 'page_id',
+            'aktif' => 'is_active'
         ];
 
         foreach ($map as $postKey => $dbKey) {
@@ -80,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($_POST['locations'] as $loc) {
                 $loc = preg_replace('/[^a-z0-9_-]/', '', $loc);
                 $db->prepare("INSERT INTO menu_locations (menu_id, location) VALUES (?,?)")
-                   ->execute([$id, $loc]);
+                    ->execute([$id, $loc]);
             }
         }
 
@@ -90,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     /*  DELETE */
     if ($action === 'delete') {
-        $id = (int)$_POST['id'];
+        $id = (int) $_POST['id'];
 
         $db->prepare("DELETE FROM menu_locations WHERE menu_id=?")->execute([$id]);
         $db->prepare("DELETE FROM menus WHERE id=?")->execute([$id]);
@@ -138,8 +144,8 @@ foreach ($locRows as $r) {
         <div class="col">
             <select id="m_page" class="form-select">
                 <option value="" lang="select_page_placeholder"></option>
-                <?php foreach($pages as $p): ?>
-                <option value="<?= $p['id'] ?>"><?= $p['slug'] ?></option>
+                <?php foreach ($pages as $p): ?>
+                    <option value="<?= e($p['id']) ?>"><?= e($p['slug']) ?></option>
                 <?php endforeach; ?>
             </select>
         </div>
@@ -163,46 +169,44 @@ foreach ($locRows as $r) {
     </div>
 </div>
 
-<?php foreach($menus as $m): ?>
-<div class="menu-row d-flex align-items-center gap-2 mb-2" data-id="<?= $m['id'] ?>">
+<?php foreach ($menus as $m): ?>
+    <div class="menu-row d-flex align-items-center gap-2 mb-2" data-id="<?= e($m['id']) ?>">
 
-    <input class="form-control" data-field="title" value="<?= htmlspecialchars($m['title']) ?>" disabled>
+        <input class="form-control" data-field="title" value="<?= e($m['title']) ?>" disabled>
 
-    <input class="form-control"  data-field="icon"
-           value="<?= htmlspecialchars($m['icon']) ?>" disabled>
+        <input class="form-control" data-field="icon" value="<?= e($m['icon']) ?>" disabled>
 
-    <input class="form-control"  data-field="order_no"
-           value="<?= $m['sort_order'] ?>" disabled>
+        <input class="form-control" data-field="order_no" value="<?= e($m['sort_order']) ?>" disabled>
 
-    <select class="form-select" data-field="page_id" disabled>
-        <option value="" lang="select_page_placeholder"></option>
-        <?php foreach($pages as $p): ?>
-        <option value="<?= $p['id'] ?>" <?= ($m['page_id']==$p['id'])?'selected':'' ?>>
-            <?= $p['slug'] ?>
-        </option>
-        <?php endforeach; ?>
-    </select>
+        <select class="form-select" data-field="page_id" disabled>
+            <option value="" lang="select_page_placeholder"></option>
+            <?php foreach ($pages as $p): ?>
+                <option value="<?= e($p['id']) ?>" <?= ($m['page_id'] == $p['id']) ? 'selected' : '' ?>>
+                    <?= e($p['slug']) ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
 
-        <input class="form-control" data-field="external_url"
-            value="<?= htmlspecialchars($m['external_url']) ?>" data-placeholder="external_url_placeholder" disabled>
+        <input class="form-control" data-field="external_url" value="<?= e($m['external_url']) ?>"
+            data-placeholder="external_url_placeholder" disabled>
 
-    <select class="form-select"  data-field="aktif" disabled>
-        <option value="1" <?= $m['is_active']?'selected':'' ?> lang="active"></option>
-        <option value="0" <?= !$m['is_active']?'selected':'' ?> lang="passive"></option>
-    </select>
+        <select class="form-select" data-field="aktif" disabled>
+            <option value="1" <?= $m['is_active'] ? 'selected' : '' ?> lang="active"></option>
+            <option value="0" <?= !$m['is_active'] ? 'selected' : '' ?> lang="passive"></option>
+        </select>
 
-    <select class="form-select"  data-field="locations" multiple disabled>
-        <?php
+        <select class="form-select" data-field="locations" multiple disabled>
+            <?php
             $locs = $menuLocations[$m['id']] ?? [];
-            foreach (['navbar','footer','sidebar','home'] as $loc):
-        ?>
-        <option value="<?= $loc ?>" <?= in_array($loc, $locs) ? 'selected':'' ?> lang="<?= $loc ?>"></option>
-        <?php endforeach; ?>
-    </select>
+            foreach (['navbar', 'footer', 'sidebar', 'home'] as $loc):
+                ?>
+                <option value="<?= $loc ?>" <?= in_array($loc, $locs) ? 'selected' : '' ?> lang="<?= $loc ?>"></option>
+            <?php endforeach; ?>
+        </select>
 
-    <button class="btn btn-primary btn-sm" onclick="MenuEdit.edit(this)"><i class="fas fa-edit"></i></button>
-    <button class="btn btn-danger btn-sm" onclick="MenuEdit.del(<?= $m['id'] ?>)"><i class="fas fa-trash"></i></button>
+        <button class="btn btn-primary btn-sm" onclick="MenuEdit.edit(this)"><i class="fas fa-edit"></i></button>
+        <button class="btn btn-danger btn-sm" onclick="MenuEdit.del(<?= e($m['id']) ?>)"><i
+                class="fas fa-trash"></i></button>
 
-</div>
+    </div>
 <?php endforeach; ?>
-

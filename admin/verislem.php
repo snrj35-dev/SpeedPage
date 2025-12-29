@@ -16,13 +16,29 @@ if (is_array($input)) {
     $_POST = array_merge($_POST, $input);
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($_POST)) {
+    // Some logic might use GET action with POST data. 
+    // Generally check if we have any POST data or if input indicates POST intent.
+    // verislem.php seems to purely rely on action param from GET often, but Data in POST.
+    // Let's enforce CSRF if there is POST data.
+
+    // Note: 'rows' action is GET, 'tables' is GET. 'insert', 'update', 'delete' use POST data.
+    if (in_array($_GET["action"] ?? "", ["insert", "update", "delete", "sql", "import_sql", "import_file"])) {
+        if (!isset($_POST['csrf']) || $_POST['csrf'] !== $_SESSION['csrf']) {
+            echo json_encode(["ok" => false, "error" => "CSRF verification failed"]);
+            exit;
+        }
+    }
+}
+
 $action = $_GET["action"] ?? "";
 
 // Determine if current user is admin (auth.php sets session role)
 $is_admin = (isset($_SESSION['role']) && $_SESSION['role'] === 'admin');
 
 // Sanitize table name
-function clean_table($t) {
+function clean_table($t)
+{
     return preg_replace("/[^a-zA-Z0-9_]/", "", $t);
 }
 
@@ -30,7 +46,7 @@ function clean_table($t) {
 if ($action === "tables") {
     echo json_encode(
         $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-           ->fetchAll(PDO::FETCH_COLUMN)
+            ->fetchAll(PDO::FETCH_COLUMN)
     );
     exit;
 }
@@ -84,8 +100,8 @@ if ($action === "insert") {
 
 /* ---------------- UPDATE ---------------- */
 if ($action === "update") {
-    $t   = clean_table($_POST["table"] ?? "");
-    $id  = (int)($_POST["id"] ?? 0);
+    $t = clean_table($_POST["table"] ?? "");
+    $id = (int) ($_POST["id"] ?? 0);
     $col = clean_table($_POST["col"] ?? "");
     $val = $_POST["val"] ?? "";
 
@@ -94,7 +110,7 @@ if ($action === "update") {
     }
 
     $db->prepare("UPDATE `$t` SET `$col`=? WHERE id=?")
-       ->execute([$val, $id]);
+        ->execute([$val, $id]);
 
     echo json_encode(["ok" => true]);
     exit;
@@ -102,8 +118,8 @@ if ($action === "update") {
 
 /* ---------------- DELETE ---------------- */
 if ($action === "delete") {
-    $t  = clean_table($_POST["table"] ?? "");
-    $id = (int)($_POST["id"] ?? 0);
+    $t = clean_table($_POST["table"] ?? "");
+    $id = (int) ($_POST["id"] ?? 0);
 
     // Prevent deleting main admin
     if ($t === "users" && $id == 1) {
@@ -120,7 +136,10 @@ if ($action === "delete") {
 if ($action === "sql") {
     try {
         $sql = trim($_POST["sql"] ?? "");
-        if (!$sql) { echo json_encode(["error"=>"SQL_EMPTY"]); exit; }
+        if (!$sql) {
+            echo json_encode(["error" => "SQL_EMPTY"]);
+            exit;
+        }
 
         $lower = ltrim(strtolower($sql));
 
@@ -144,11 +163,11 @@ if ($action === "sql") {
 if ($action === "export_sql") {
     $dump = "";
     $tables = $db->query("SELECT name FROM sqlite_master WHERE type='table'")
-                 ->fetchAll(PDO::FETCH_COLUMN);
+        ->fetchAll(PDO::FETCH_COLUMN);
 
     foreach ($tables as $t) {
         $row = $db->query("SELECT sql FROM sqlite_master WHERE name='$t'")
-                  ->fetch(PDO::FETCH_ASSOC);
+            ->fetch(PDO::FETCH_ASSOC);
 
         if (!empty($row["sql"])) {
             $dump .= $row["sql"] . ";\n\n";
@@ -171,11 +190,11 @@ if ($action === "export_sql") {
 if ($action === "export_sql_file") {
     $dump = "";
     $tables = $db->query("SELECT name FROM sqlite_master WHERE type='table'")
-                 ->fetchAll(PDO::FETCH_COLUMN);
+        ->fetchAll(PDO::FETCH_COLUMN);
 
     foreach ($tables as $t) {
         $row = $db->query("SELECT sql FROM sqlite_master WHERE name='$t'")
-                  ->fetch(PDO::FETCH_ASSOC);
+            ->fetch(PDO::FETCH_ASSOC);
 
         if (!empty($row["sql"])) {
             $dump .= $row["sql"] . ";\n\n";
@@ -249,7 +268,8 @@ if ($action === 'import_file') {
 
         echo json_encode(["ok" => true]);
     } catch (Exception $e) {
-        if ($db->inTransaction()) $db->rollBack();
+        if ($db->inTransaction())
+            $db->rollBack();
         echo json_encode(["ok" => false, "error" => $e->getMessage()]);
     }
     exit;

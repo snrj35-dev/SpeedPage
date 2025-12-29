@@ -9,13 +9,34 @@ let brOpenFile = ''; // Düzenlenen dosya yolu
 function brLoad(path = '') {
     brPath = path; // Kök dizine atma sorununu çözen kritik satır
     brUpdateBreadcrumb(path);
-    
+
     $.get('?page=browser&api=1', { path: path }, (files) => {
         let html = '';
         files.forEach(f => {
             const isZip = f.ext === 'zip';
-            const icon = f.type === 'dir' ? 'fa-folder text-warning' : 'fa-file-alt text-muted';
-            
+            let icon = 'fa-file text-secondary';
+            if (f.type === 'dir') icon = 'fa-folder text-warning';
+            else {
+                // Extension based icons
+                const extMap = {
+                    'zip': 'fa-file-zipper text-success',
+                    'rar': 'fa-file-zipper text-success',
+                    'png': 'fa-file-image text-danger',
+                    'jpg': 'fa-file-image text-danger',
+                    'jpeg': 'fa-file-image text-danger',
+                    'gif': 'fa-file-image text-danger',
+                    'php': 'fa-file-code text-primary',
+                    'html': 'fa-file-code text-primary',
+                    'js': 'fa-brands fa-js text-warning',
+                    'css': 'fa-brands fa-css3-alt text-info',
+                    'json': 'fa-file-code text-secondary',
+                    'sql': 'fa-database text-secondary',
+                    'txt': 'fa-file-lines text-secondary',
+                    'pdf': 'fa-file-pdf text-danger'
+                };
+                if (extMap[f.ext]) icon = extMap[f.ext];
+            }
+
             html += `
             <div class="col-6 col-md-3 col-xl-2">
                 <div class="browser-card shadow-sm h-100" onclick="brAction('${f.path}', '${f.type}', '${f.ext}')" style="cursor:pointer">
@@ -29,13 +50,15 @@ function brLoad(path = '') {
                             <li><a class="dropdown-item text-danger" onclick="brDelete('${f.path}')"><i class="fa fa-trash me-2"></i><span lang="br_delete">Sil</span></a></li>
                         </ul>
                     </div>
-                    <div class="browser-icon"><i class="fa ${icon}"></i></div>
+                    <div class="browser-icon" style="font-size: 3.5rem;">
+                        <i class="fa ${icon}"></i>
+                    </div>
                     <div class="p-2 text-center text-truncate small fw-bold text-dark">${f.name}</div>
                 </div>
             </div>`;
         });
         $('#br-grid').html(html || `<div class="text-center p-5 w-100 opacity-50"><span lang="br_empty">Klasör Boş</span></div>`);
-        
+
         if (typeof window.lang !== 'undefined') {
             updateContent(window.lang);
         }
@@ -48,9 +71,9 @@ function brAction(path, type, ext) {
 }
 
 function brUnzip(p) {
-    if(confirm("Dosyalar bu klasöre çıkartılacak. Onaylıyor musunuz?")) {
-        $.post('?page=browser&unzip=1', { path: p }, (r) => {
-            if(r.ok) brLoad(brPath);
+    if (confirm("Dosyalar bu klasöre çıkartılacak. Onaylıyor musunuz?")) {
+        $.post('?page=browser&unzip=1', { path: p, csrf: CSRF_TOKEN }, (r) => {
+            if (r.ok) brLoad(brPath);
             else alert("Zip açılırken bir hata oluştu.");
         });
     }
@@ -62,14 +85,14 @@ function brUpdateBreadcrumb(path) {
     let base = '';
     parts.forEach((p, i) => {
         base += (i === 0 ? '' : '/') + p;
-        html += `<li class="breadcrumb-item ${i===parts.length-1?'active':''}"><a href="javascript:void(0)" onclick="brLoad('${base}')">${p}</a></li>`;
+        html += `<li class="breadcrumb-item ${i === parts.length - 1 ? 'active' : ''}"><a href="javascript:void(0)" onclick="brLoad('${base}')">${p}</a></li>`;
     });
     $('#br-breadcrumb').html(html);
 }
 
 function brEdit(p, e) {
     brOpenFile = p;
-    const editable = ['txt','json','php','js','css','html','md','log'];
+    const editable = ['txt', 'json', 'php', 'js', 'css', 'html', 'md', 'log'];
     if (!editable.includes(e)) return;
 
     $.get('?page=browser&read=' + encodeURIComponent(p), r => {
@@ -86,35 +109,40 @@ function brEdit(p, e) {
 
 function brSave() {
     // save=1 parametresi GET olarak gönderilirken içerik POST ile gönderilir
-    $.post('?page=browser&save=1', { file: brOpenFile, content: $('#br-editor').val() }, (res) => {
+    $.post('?page=browser&save=1', { file: brOpenFile, content: $('#br-editor').val(), csrf: CSRF_TOKEN }, (res) => {
         alert((window.lang && window.lang.br_saved) ? window.lang.br_saved : "Kaydedildi!");
     });
 }
 
-function brDelete(p) { 
+function brDelete(p) {
     const msg = (window.lang && window.lang.br_confirm_delete) ? window.lang.br_confirm_delete : "Emin misiniz?";
-    if(confirm(msg)) $.get('?page=browser&delete='+encodeURIComponent(p), () => brLoad(brPath)); 
+    if (confirm(msg)) {
+        $.post('?page=browser&delete=1', { path: p, csrf: CSRF_TOKEN }, (res) => {
+            if (res && res.error) alert(res.error);
+            brLoad(brPath);
+        }, 'json');
+    }
 }
 
-function brCreateFile() { 
-    let n = prompt("Dosya Adı:"); 
-    if(n) $.post('?page=browser&touch=1', {path:brPath, name:n}, () => brLoad(brPath)); 
+function brCreateFile() {
+    let n = prompt("Dosya Adı:");
+    if (n) $.post('?page=browser&touch=1', { path: brPath, name: n, csrf: CSRF_TOKEN }, () => brLoad(brPath));
 }
 
-function brCreateFolder() { 
-    let n = prompt("Klasör Adı:"); 
-    if(n) $.post('?page=browser&mkdir=1', {path:brPath, name:n}, () => brLoad(brPath)); 
+function brCreateFolder() {
+    let n = prompt("Klasör Adı:");
+    if (n) $.post('?page=browser&mkdir=1', { path: brPath, name: n, csrf: CSRF_TOKEN }, () => brLoad(brPath));
 }
 
-function brRename(p, n) { 
-    let x = prompt("Yeni Ad:", n); 
-    if(x) $.post('?page=browser&rename=1', {old:p, new:x}, () => brLoad(brPath)); 
+function brRename(p, n) {
+    let x = prompt("Yeni Ad:", n);
+    if (x) $.post('?page=browser&rename=1', { old: p, new: x, csrf: CSRF_TOKEN }, () => brLoad(brPath));
 }
 
 // Ctrl+S Dinleyicisi
-$(document).keydown(function(e) {
+$(document).keydown(function (e) {
     if ((e.ctrlKey || e.metaKey) && e.which === 83 && $('#br-editor').is(':visible')) {
-        e.preventDefault(); 
+        e.preventDefault();
         brSave();
     }
 });
@@ -123,15 +151,16 @@ $(document).keydown(function(e) {
 $('#br-upload').change(e => {
     let fd = new FormData();
     [...e.target.files].forEach(f => {
-        fd.append('path', brPath); 
+        fd.append('path', brPath);
         fd.append('f', f);
-        $.ajax({ 
-            url:'?page=browser&upload=1', 
-            method:'POST', 
-            data:fd, 
-            processData:false, 
-            contentType:false, 
-            success:() => brLoad(brPath) 
+        fd.append('csrf', CSRF_TOKEN);
+        $.ajax({
+            url: '?page=browser&upload=1',
+            method: 'POST',
+            data: fd,
+            processData: false,
+            contentType: false,
+            success: () => brLoad(brPath)
         });
     });
 });

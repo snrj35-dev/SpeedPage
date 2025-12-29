@@ -5,6 +5,13 @@ require_once __DIR__ . '/db.php';
 
 $action = $_POST['action'] ?? '';
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf']) || $_POST['csrf'] !== $_SESSION['csrf']) {
+        echo json_encode(["status" => "error", "message" => "CSRF verification failed", "message_key" => "errdata"]);
+        exit;
+    }
+}
+
 /* ---------------- Ensure tables exist ---------------- */
 $db->exec("
 CREATE TABLE IF NOT EXISTS modules (
@@ -33,42 +40,43 @@ CREATE TABLE IF NOT EXISTS module_assets (
 if ($action === 'upload') {
 
     if (!isset($_FILES['module_zip'])) {
-        echo json_encode(["status"=>"error","message"=>"Zip dosyası bulunamadı","message_key"=>"module_zip_missing"]);
+        echo json_encode(["status" => "error", "message" => "Zip dosyası bulunamadı", "message_key" => "module_zip_missing"]);
         exit;
     }
 
     $zipFile = $_FILES['module_zip']['tmp_name'];
     $extractPath = ROOT_DIR . "modules/tmp_" . time();
 
-    if (!is_dir($extractPath)) mkdir($extractPath, 0755, true);
+    if (!is_dir($extractPath))
+        mkdir($extractPath, 0755, true);
 
     $zip = new ZipArchive;
     if ($zip->open($zipFile) === TRUE) {
         $zip->extractTo($extractPath);
         $zip->close();
     } else {
-        echo json_encode(["status"=>"error","message"=>"Zip açılamadı","message_key"=>"zip_open_failed"]);
+        echo json_encode(["status" => "error", "message" => "Zip açılamadı", "message_key" => "zip_open_failed"]);
         exit;
     }
 
     /* ---------------- Read module.json ---------------- */
     $configFile = $extractPath . "/module.json";
     if (!file_exists($configFile)) {
-        echo json_encode(["status"=>"error","message"=>"module.json bulunamadı","message_key"=>"module_json_missing"]);
+        echo json_encode(["status" => "error", "message" => "module.json bulunamadı", "message_key" => "module_json_missing"]);
         exit;
     }
 
     $config = json_decode(file_get_contents($configFile), true);
 
-    $slug        = $config['name'];
-    $title       = $config['title'];
+    $slug = $config['name'];
+    $title = $config['title'];
     $description = $config['description'] ?? '';
-    $icon        = $config['icon'] ?? '';
-    $version     = $config['version'] ?? '1.0';
+    $icon = $config['icon'] ?? '';
+    $version = $config['version'] ?? '1.0';
 
-    $menu_title  = $config['menu_title'] ?? $title;
-    $menu_icon   = $config['menu_icon'] ?? $icon;
-    $locations   = $config['locations'] ?? ['navbar'];
+    $menu_title = $config['menu_title'] ?? $title;
+    $menu_icon = $config['menu_icon'] ?? $icon;
+    $locations = $config['locations'] ?? ['navbar'];
 
     /* ---------------- Copy page file ---------------- */
     if (isset($config['page'])) {
@@ -77,7 +85,7 @@ if ($action === 'upload') {
 
     try {
         /* ---------------- Insert into pages ---------------- */
-        $sort_order = (int)$db->query("SELECT COALESCE(MAX(sort_order),0)+1 FROM pages")->fetchColumn();
+        $sort_order = (int) $db->query("SELECT COALESCE(MAX(sort_order),0)+1 FROM pages")->fetchColumn();
 
         $stmt = $db->prepare("
             INSERT INTO pages (slug, title, description, icon, is_active, sort_order)
@@ -85,7 +93,7 @@ if ($action === 'upload') {
         ");
         $stmt->execute([$slug, $title, $description, $icon, $sort_order]);
 
-        $page_id = (int)$db->lastInsertId();
+        $page_id = (int) $db->lastInsertId();
 
         /* ---------------- Insert page assets ---------------- */
         $order = 1;
@@ -113,7 +121,7 @@ if ($action === 'upload') {
         ");
         $stmt->execute([$page_id, $menu_title, $menu_icon, $sort_order]);
 
-        $menu_id = (int)$db->lastInsertId();
+        $menu_id = (int) $db->lastInsertId();
 
         /* ---------------- Insert menu locations ---------------- */
         foreach ($locations as $loc) {
@@ -131,10 +139,10 @@ if ($action === 'upload') {
         ");
         $stmt->execute([$slug, $title, $version, $description, $slug]);
 
-        $module_id = (int)$db->lastInsertId();
+        $module_id = (int) $db->lastInsertId();
 
         /* ---------------- Copy CDN assets + module_assets ---------------- */
-        foreach (['css','js','json'] as $type) {
+        foreach (['css', 'js', 'json'] as $type) {
             if (!empty($config['cdn'][$type])) {
                 $order = 1;
                 foreach ($config['cdn'][$type] as $file) {
@@ -151,19 +159,18 @@ if ($action === 'upload') {
             }
         }
 
-        echo json_encode(["status"=>"success","message"=>"Modül başarıyla yüklendi","message_key"=>"module_upload_success"]);
+        echo json_encode(["status" => "success", "message" => "Modül başarıyla yüklendi", "message_key" => "module_upload_success"]);
 
     } catch (Exception $e) {
-        echo json_encode(["status"=>"error","message"=>"DB hata: " . $e->getMessage(),"message_key"=>"errdata"]);
+        echo json_encode(["status" => "error", "message" => "DB hata: " . $e->getMessage(), "message_key" => "errdata"]);
     }
 
     exit;
 }
 
-/* ---------------- DELETE MODULE ---------------- */
-elseif ($action === 'delete') {
+/* ---------------- DELETE MODULE ---------------- */ elseif ($action === 'delete') {
 
-    $id = (int)$_POST['id'];
+    $id = (int) $_POST['id'];
 
     // Modülü bul
     $stmt = $db->prepare("SELECT * FROM modules WHERE id=?");
@@ -171,7 +178,7 @@ elseif ($action === 'delete') {
     $module = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$module) {
-        echo json_encode(["status"=>"error","message"=>"Modül bulunamadı","message_key"=>"module_not_found"]);
+        echo json_encode(["status" => "error", "message" => "Modül bulunamadı", "message_key" => "module_not_found"]);
         exit;
     }
 
@@ -240,21 +247,20 @@ elseif ($action === 'delete') {
         }
     }
 
-    echo json_encode(["status"=>"success","message"=>"Modül ve dosyaları tamamen silindi","message_key"=>"module_uninstalled"]);
+    echo json_encode(["status" => "success", "message" => "Modül ve dosyaları tamamen silindi", "message_key" => "module_uninstalled"]);
     exit;
 }
 
-/* ---------------- TOGGLE MODULE (ENABLE / DISABLE) ---------------- */
-elseif ($action === 'toggle') {
+/* ---------------- TOGGLE MODULE (ENABLE / DISABLE) ---------------- */ elseif ($action === 'toggle') {
 
-    $id = (int)($_POST['id'] ?? 0);
+    $id = (int) ($_POST['id'] ?? 0);
 
     $stmt = $db->prepare("SELECT * FROM modules WHERE id=?");
     $stmt->execute([$id]);
     $module = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$module) {
-        echo json_encode(["status"=>"error","message"=>"Modül bulunamadı"]);
+        echo json_encode(["status" => "error", "message" => "Modül bulunamadı"]);
         exit;
     }
 
@@ -278,9 +284,9 @@ elseif ($action === 'toggle') {
             $db->prepare("UPDATE menus SET is_active=? WHERE page_id=?")->execute([$newState, $page_id]);
         }
 
-        echo json_encode(["status"=>"success","message"=>($newState ? "Modül etkinleştirildi" : "Modül devre dışı bırakıldı"), "message_key"=>($newState?"module_activated":"module_deactivated"), "is_active"=>$newState]);
+        echo json_encode(["status" => "success", "message" => ($newState ? "Modül etkinleştirildi" : "Modül devre dışı bırakıldı"), "message_key" => ($newState ? "module_activated" : "module_deactivated"), "is_active" => $newState]);
     } catch (Exception $e) {
-        echo json_encode(["status"=>"error","message"=>"DB hata: " . $e->getMessage(),"message_key"=>"errdata"]);
+        echo json_encode(["status" => "error", "message" => "DB hata: " . $e->getMessage(), "message_key" => "errdata"]);
     }
 
     exit;
