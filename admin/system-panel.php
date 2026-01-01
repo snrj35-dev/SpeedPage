@@ -10,6 +10,25 @@ header('X-Content-Type-Options: nosniff');
 
 $data = [];
 
+// 0. Otomatik Temizlik ve Logları Çek
+sp_log_cleanup(30); // 30 günden eski logları sil
+
+// Logları Çek
+$logs = [];
+try {
+    ensure_log_table();
+    $logs = $db->query("
+        SELECT l.*, u.username 
+        FROM logs l 
+        LEFT JOIN users u ON l.user_id = u.id 
+        ORDER BY l.id DESC 
+        LIMIT 100
+    ")->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    // Log tablosu henüz yoksa veya hata varsa
+    $logs = [];
+}
+
 /* System */
 $data['system'] = [
     'OS' => PHP_OS_FAMILY,
@@ -171,7 +190,7 @@ if (isset($_GET['ajax'])) {
                             <button class="accordion-button collapsed text" type="button" data-bs-toggle="collapse"
                                 data-bs-target="#ext">
                                 <i class="fa-solid fa-puzzle-piece me-2"></i>
-                                <span lang="php_extensions">PHP Eklentileri</span> (<?= count($data['extensions']) ?>)
+                                <span lang="php_extensions"></span> (<?= count($data['extensions']) ?>)
                             </button>
                         </h2>
                         <div id="ext" class="accordion-collapse collapse" data-bs-parent="#sysAccordion">
@@ -189,7 +208,7 @@ if (isset($_GET['ajax'])) {
                             <button class="accordion-button collapsed text" type="button" data-bs-toggle="collapse"
                                 data-bs-target="#db">
                                 <i class="fa-solid fa-database me-2"></i>
-                                <span lang="databases">Veritabanları</span>
+                                <span lang="databases"></span>
                             </button>
                         </h2>
                         <div id="db" class="accordion-collapse collapse" data-bs-parent="#sysAccordion">
@@ -211,7 +230,7 @@ if (isset($_GET['ajax'])) {
                             <button class="accordion-button collapsed text" type="button" data-bs-toggle="collapse"
                                 data-bs-target="#apache">
                                 <i class="fa-solid fa-cubes me-2"></i>
-                                <span lang="apache_modules">Apache Modülleri</span>
+                                <span lang="apache_modules"></span>
                                 (<?= count($data['apache_modules']) ?>)
                             </button>
                         </h2>
@@ -230,7 +249,7 @@ if (isset($_GET['ajax'])) {
                             <button class="accordion-button collapsed text-warning" type="button"
                                 data-bs-toggle="collapse" data-bs-target="#logs">
                                 <i class="fa-solid fa-file-lines me-2"></i>
-                                <span lang="php_logs">PHP Logları</span>
+                                <span lang="php_logs"></span>
                             </button>
                         </h2>
                         <div id="logs" class="accordion-collapse collapse" data-bs-parent="#sysAccordion">
@@ -247,7 +266,7 @@ if (isset($_GET['ajax'])) {
                             <button class="accordion-button collapsed text" type="button" data-bs-toggle="collapse"
                                 data-bs-target="#visitors">
                                 <i class="fa-solid fa-users me-2"></i>
-                                <span lang="active_visitors">Aktif Ziyaretçiler</span> (<?= count($data['visitors']) ?>)
+                                <span lang="active_visitors"></span> (<?= count($data['visitors']) ?>)
                             </button>
                         </h2>
                         <div id="visitors" class="accordion-collapse collapse" data-bs-parent="#sysAccordion">
@@ -268,7 +287,7 @@ if (isset($_GET['ajax'])) {
                             <button class="accordion-button collapsed text" type="button" data-bs-toggle="collapse"
                                 data-bs-target="#perms">
                                 <i class="fa-solid fa-lock me-2"></i>
-                                <span lang="file_permissions">Dosya İzinleri</span>
+                                <span lang="file_permissions"></span>
                             </button>
                         </h2>
                         <div id="perms" class="accordion-collapse collapse" data-bs-parent="#sysAccordion">
@@ -290,7 +309,7 @@ if (isset($_GET['ajax'])) {
                             <button class="accordion-button collapsed text" type="button" data-bs-toggle="collapse"
                                 data-bs-target="#phpini">
                                 <i class="fa-solid fa-gear me-2"></i>
-                                <span lang="php_ini_settings">PHP Ayarları</span>
+                                <span lang="php_ini_settings"></span>
                             </button>
                         </h2>
                         <div id="phpini" class="accordion-collapse collapse" data-bs-parent="#sysAccordion">
@@ -310,3 +329,116 @@ if (isset($_GET['ajax'])) {
         </div>
     </div>
 </div>
+
+<!-- LOG & AUDIT TABLOSU -->
+<div class="card mt-4 shadow-sm">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h6 class="m-0 text-primary"><i class="fas fa-history me-2"></i> <span lang="audit_logs">Denetim Logları (Son
+                100)</span></h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped align-middle mb-0" style="font-size: 0.85rem;">
+                <thead class="bg-light">
+                    <tr>
+                        <th width="50">#</th>
+                        <th width="120" lang="date">Tarih</th>
+                        <th lang="action_type">İşlem</th>
+                        <th lang="user">Kullanıcı</th>
+                        <th lang="ip">IP</th>
+                        <th lang="message">Mesaj</th>
+                        <th width="80" class="text-end" lang="details">Detay</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($logs)): ?>
+                        <tr>
+                            <td colspan="7" class="text-center py-3 text-muted" lang="no_logs">Kayıt bulunamadı.</td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($logs as $log): ?>
+                            <tr>
+                                <td><?= $log['id'] ?></td>
+                                <td><?= $log['created_at'] ?></td>
+                                <td>
+                                    <?php
+                                    $badges = [
+                                        'login_fail' => 'bg-danger',
+                                        'login_success' => 'bg-success',
+                                        'page_edit' => 'bg-primary',
+                                        'settings_update' => 'bg-warning text-dark',
+                                        'system_error' => 'bg-dark'
+                                    ];
+                                    $bg = $badges[$log['action_type']] ?? 'bg-secondary';
+                                    ?>
+                                    <span class="badge <?= $bg ?>"><?= e($log['action_type']) ?></span>
+                                </td>
+                                <td class="fw-bold"><?= e($log['username'] ?? 'Ziyaretçi') ?></td>
+                                <td class="text-muted small"><?= e($log['ip_address']) ?></td>
+                                <td><?= e($log['message']) ?></td>
+                                <td class="text-end">
+                                    <?php if (!empty($log['old_data']) || !empty($log['new_data'])): ?>
+                                        <button class="btn btn-sm btn-outline-info"
+                                            onclick='viewLogDetails(<?= json_encode($log, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'>
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                    <?php else: ?>
+                                        <span class="text-muted">-</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+</div>
+
+<!-- LOG DETAY MODAL -->
+<div class="modal fade" id="logDetailModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-search me-2"></i> <span lang="log_details">Log Detayı</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body bg-light">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="border-bottom pb-2 text-danger">Eski Veri (Old)</h6>
+                        <pre id="logOld" class="bg-body border p-3 rounded"
+                            style="max-height: 400px; overflow: auto;"></pre>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="border-bottom pb-2 text-success">Yeni Veri (New)</h6>
+                        <pre id="logNew" class="bg-body border p-3 rounded"
+                            style="max-height: 400px; overflow: auto;"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function viewLogDetails(log) {
+        const formatJSON = (str) => {
+            if (!str) return "{}";
+            try {
+                return JSON.stringify(JSON.parse(str), null, 4);
+            } catch (e) {
+                return str;
+            }
+        };
+
+        document.getElementById('logOld').textContent = formatJSON(log.old_data);
+        document.getElementById('logNew').textContent = formatJSON(log.new_data);
+
+        const modal = new bootstrap.Modal(document.getElementById('logDetailModal'));
+        modal.show();
+    }
+</script>

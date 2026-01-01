@@ -62,12 +62,13 @@ if (!$role && isset($_SESSION['user_id'])) {
 
 // ... (Önceki kodlarınız: session_start, DB bağlantısı vb.)
 
-// Helper: is current user admin?
+// Helper: is current user admin or editor?
 $role = $role ?? 'user';
 $is_admin = ($role === 'admin');
+$is_editor = ($role === 'editor');
 
-// Eğer admin değilse index.php'ye gönder
-if (!$is_admin) {
+// Eğer admin veya editor değilse index.php'ye gönder
+if (!$is_admin && !$is_editor) {
     header("Location: ../index.php");
     exit(); // Kodun devamının çalışmasını engellemek için kritik
 }

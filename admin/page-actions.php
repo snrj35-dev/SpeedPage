@@ -11,6 +11,9 @@ function cleanSlug($s)
 
 // 1. SİLME İŞLEMİ (Sayfa + Asset + Menü)
 if (isset($_GET['action']) && $_GET['action'] === 'delete') {
+    if (!$is_admin) {
+        die("Yetkisiz işlem. Silme yetkiniz yok.");
+    }
     $slug = cleanSlug($_GET['slug'] ?? '');
 
     if (!$slug) {
@@ -50,6 +53,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete') {
 
             // D. Son olarak Sayfayı DB'den sil
             $db->prepare("DELETE FROM pages WHERE id=?")->execute([$page_id]);
+
+            sp_log("Sayfa silindi: $slug (ID: $page_id)", "page_delete", $page, null);
         }
 
         header("Location: index.php?page=pages"); // İşlem bitince listeye dön
@@ -152,9 +157,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             echo "✅ <span lang=\"page_created\"></span>";
+            sp_log("Yeni sayfa oluşturuldu: $slug", "page_create", null, ['slug' => $slug, 'title' => $title]);
         } else {
             // Düzenleme (Edit)
             $old_slug = cleanSlug($_POST['old_slug']);
+
+            // Eski veriyi çek
+            $stmtOld = $db->prepare("SELECT * FROM pages WHERE slug=?");
+            $stmtOld->execute([$old_slug]);
+            $oldData = $stmtOld->fetch(PDO::FETCH_ASSOC);
 
             // Dosya adını değiştirme (Eğer slug değiştiyse)
             if ($old_slug !== $slug) {
@@ -165,6 +176,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $db->prepare("UPDATE pages SET slug=?, title=?, description=?, icon=?, is_active=? WHERE slug=?")
                 ->execute([$slug, $title, $description, $icon, $is_active, $old_slug]);
+
+            // Yeni veriyi hazırla (basitçe array olarak)
+            $newData = [
+                'slug' => $slug,
+                'title' => $title,
+                'description' => $description,
+                'icon' => $icon,
+                'is_active' => $is_active
+            ];
+            sp_log("Sayfa düzenlendi: $slug", "page_edit", $oldData, $newData);
 
             $stmt = $db->prepare("SELECT id FROM pages WHERE slug=?");
             $stmt->execute([$slug]);

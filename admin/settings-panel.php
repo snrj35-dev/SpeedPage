@@ -150,7 +150,7 @@ $config = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
                 </div>
 
                 <!-- ✅ Şifre Değişikliği -->
-                <div class="mb-4">
+                <div class="mb-4 border-bottom pb-3">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <h6 class="fw-bold mb-0" lang="password_change"></h6>
@@ -159,6 +159,22 @@ $config = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
                         <div class="form-check form-switch fs-4">
                             <input class="form-check-input" type="checkbox" name="allow_password_change" value="1"
                                 <?= ($config['allow_password_change'] ?? '1') == '1' ? 'checked' : '' ?>>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ✅ Tema Seçimi İzni -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="fw-bold mb-0" lang="allow_user_theme">Kullanıcı Tema Seçimi</h6>
+                            <small lang="allow_user_theme_desc">Kullanıcıların kendi profil ayarlarından istedikleri
+                                temayı seçmelerine izin
+                                ver.</small>
+                        </div>
+                        <div class="form-check form-switch fs-4">
+                            <input class="form-check-input" type="checkbox" name="allow_user_theme" value="1"
+                                <?= ($config['allow_user_theme'] ?? '0') == '1' ? 'checked' : '' ?>>
                         </div>
                     </div>
                 </div>
@@ -225,7 +241,7 @@ $config = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
         <hr>
         <div class="d-grid">
             <button type="submit" class="btn btn-primary btn-lg">
-                <i class="fas fa-save me-2"></i> <span lang="apply_changes"></span>
+                <i class="fas fa-save me-2"></i> <span lang="save_changes"></span>
             </button>
         </div>
     </form>

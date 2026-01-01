@@ -54,7 +54,8 @@ try {
                     <td data-label="Açıklama"><?= e($m['description']) ?></td>
                     <td data-label="Slug"><?= e($m['page_slug']) ?></td>
                     <td class="module-status" data-label="Durum">
-                        <?= $m['is_active'] ? '<span lang="active"></span>' : '<span lang="passive"></span>' ?></td>
+                        <?= $m['is_active'] ? '<span lang="active"></span>' : '<span lang="passive"></span>' ?>
+                    </td>
                     <td data-label="">
                         <button class="btn btn-sm btn-secondary toggle-module-btn" data-id="<?= e($m['id']) ?>"
                             data-active="<?= $m['is_active'] ? '1' : '0' ?>">
@@ -65,8 +66,10 @@ try {
                             <?php endif; ?>
                         </button>
 
-                        <button class="btn btn-sm btn-danger delete-module-btn" data-id="<?= e($m['id']) ?>"
-                            lang="delete"></button>
+                        <?php if ($is_admin): ?>
+                            <button class="btn btn-sm btn-danger delete-module-btn" data-id="<?= e($m['id']) ?>"
+                                lang="delete"></button>
+                        <?php endif; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>

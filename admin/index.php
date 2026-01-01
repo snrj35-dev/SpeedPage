@@ -2,6 +2,28 @@
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/db.php';
+
+// ✅ Fetch Global Settings
+$stSet = $db->query("SELECT `key`, `value` FROM settings");
+$settings = $stSet->fetchAll(PDO::FETCH_KEY_PAIR);
+
+// ✅ Active Theme Definition (Admin panel usually uses default or system default, but we define it for consistency)
+if (!defined('ACTIVE_THEME')) {
+    $defaultTheme = $settings['active_theme'] ?? 'default';
+    $finalTheme = $defaultTheme;
+
+    // Optional: Admin might want to see the site in their preferred theme too? 
+    // The user asked for "Sabit Tanımı Kontrolü" in both, so let's apply it.
+    if (isset($settings['allow_user_theme']) && $settings['allow_user_theme'] == '1' && !empty($_SESSION['user_id'])) {
+        $stmt = $db->prepare("SELECT preferred_theme FROM users WHERE id = ?");
+        $stmt->execute([$_SESSION['user_id']]);
+        $pref = $stmt->fetchColumn();
+        if ($pref) {
+            $finalTheme = $pref;
+        }
+    }
+    define('ACTIVE_THEME', $finalTheme);
+}
 // Kullanıcı bilgisi
 $userQuery = $db->prepare("SELECT display_name, username, avatar_url FROM users WHERE id = ?");
 $userQuery->execute([$_SESSION['user_id']]);
@@ -11,7 +33,8 @@ $finalName = $currentUser['display_name'] ?: ($currentUser['username'] ?: 'Kulla
 $finalAvatar = $currentUser['avatar_url'] ?: 'fa-user';
 
 // Hangi sayfa?
-$page = $_GET['page'] ?? 'settings';
+$default_page = $is_admin ? 'settings' : 'pages';
+$page = $_GET['page'] ?? $default_page;
 if ($page === 'browser') {
     require_once __DIR__ . '/browser-islem.php';
 }
@@ -19,7 +42,7 @@ if ($page === 'browser') {
 $globalCss = [
     CDN_URL . "css/bootstrap.min.css",
     CDN_URL . "css/all.min.css",
-    CDN_URL . "css/style.css"
+    CDN_URL . "css/admin-core.css"
 ];
 $globalJs = [
     CDN_URL . "js/jquery-3.7.1.min.js",
@@ -51,17 +74,24 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title lang="page_title"></title>
     <script>
+        // Immediate theme check
+        (function () {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        })();
         const BASE_PATH = '<?= e(BASE_PATH) ?>';
         const CSRF_TOKEN = '<?= e($_SESSION['csrf']) ?>';
     </script>
     <!-- Global CSS -->
     <?php foreach ($globalCss as $css): ?>
-        <link rel="stylesheet" href="<?= $css ?>">
+        <link rel="stylesheet" href="<?= $css ?>?v=<?= time() ?>">
     <?php endforeach; ?>
 
     <!-- Sayfa özel CSS -->
     <?php foreach ($currentAssets['css'] as $css): ?>
-        <link rel="stylesheet" href="<?= $css ?>">
+        <link rel="stylesheet" href="<?= $css ?>?v=<?= time() ?>">
     <?php endforeach; ?>
 </head>
 
@@ -81,36 +111,64 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
             <a href="../index.php" class="btn btn-sm btn-outline-success"><i class="fa-solid fa-home"></i></a>
             <a href="../php/logout.php" class="btn btn-sm btn-outline-danger"><i
                     class="fa-solid fa-right-from-bracket"></i></a>
-            <button id="theme-toggle" onclick="toggleTheme()"><i class="fas fa-moon"></i></button>
+            <button id="theme-toggle" class="btn btn-sm btn-outline-secondary"><i class="fas fa-moon"></i></button>
+            <select id="lang-select" class="form-select form-select-sm border-0 rounded-pill px-2 px-md-3"
+                style="width: auto;">
+                <option value="tr">TR</option>
+                <option value="en">EN</option>
+            </select>
         </div>
     </nav>
 
-    <!-- Menü -->
-    <nav class="nav px-4 py-2 border-bottom">
-        <a href="index.php?page=settings" class="nav-link"><i class="fas fa-file-alt"></i> <span
-                lang="settings"></span></a>
-        <a href="index.php?page=pages" class="nav-link"><i class="fas fa-file"></i> <span lang="pages"></span></a>
-        <a href="index.php?page=menu" class="nav-link"><i class="fas fa-clipboard-list"></i> <span
-                lang="menu_management"></span></a>
-        <a href="index.php?page=modules" class="nav-link"><i class="fas fa-puzzle-piece"></i> <span
-                lang="modules"></span></a>
-        <?php if (!empty($is_admin) && $is_admin): ?>
-            <a href="index.php?page=users" class="nav-link"><i class="fas fa-users"></i> <span lang="users"></span></a>
-            <a href="index.php?page=dbpanel" class="nav-link"><i class="fas fa-database"></i> <span
-                    lang="database"></span></a>
-            <a href="index.php?page=browser" class="nav-link"><i class="fas fa-folder-open"></i> <span
-                    lang="filebrowser"></span></a>
-            <a href="index.php?page=system" class="nav-link"> <i class="fas fa-cogs"></i> <span lang="system"></span></a>
 
-        <?php endif; ?>
-    </nav>
+
+    <!-- Menü -->
+    <div class="admin-nav-container border-bottom sticky-top shadow-sm" style="top: 71px; z-index: 1020;">
+        <nav class="nav admin-nav-scroll px-3">
+            <?php if ($is_admin): ?>
+                <a href="index.php?page=settings" class="nav-link <?= $page === 'settings' ? 'active' : '' ?>">
+                    <i class="fas fa-cog"></i> <span lang="settings"></span>
+                </a>
+            <?php endif; ?>
+            <a href="index.php?page=pages" class="nav-link <?= $page === 'pages' ? 'active' : '' ?>">
+                <i class="fas fa-file"></i> <span lang="pages"></span>
+            </a>
+            <a href="index.php?page=menu" class="nav-link <?= $page === 'menu' ? 'active' : '' ?>">
+                <i class="fas fa-bars"></i> <span lang="menu_management"></span>
+            </a>
+            <a href="index.php?page=modules" class="nav-link <?= $page === 'modules' ? 'active' : '' ?>">
+                <i class="fas fa-puzzle-piece"></i> <span lang="modules"></span>
+            </a>
+            <a href="index.php?page=themes"
+                class="nav-link <?= ($page === 'themes' || $page === 'theme-settings') ? 'active' : '' ?>">
+                <i class="fas fa-palette"></i> <span lang="themes"></span>
+            </a>
+            <?php if (!empty($is_admin) && $is_admin): ?>
+                <a href="index.php?page=users" class="nav-link <?= $page === 'users' ? 'active' : '' ?>">
+                    <i class="fas fa-users"></i> <span lang="users"></span>
+                </a>
+                <a href="index.php?page=dbpanel" class="nav-link <?= $page === 'dbpanel' ? 'active' : '' ?>">
+                    <i class="fas fa-database"></i> <span lang="database"></span>
+                </a>
+                <a href="index.php?page=browser" class="nav-link <?= $page === 'browser' ? 'active' : '' ?>">
+                    <i class="fas fa-folder-open"></i> <span lang="filebrowser"></span>
+                </a>
+                <a href="index.php?page=system" class="nav-link <?= $page === 'system' ? 'active' : '' ?>">
+                    <i class="fas fa-microchip"></i> <span lang="system"></span>
+                </a>
+            <?php endif; ?>
+        </nav>
+    </div>
 
     <!-- İçerik -->
     <div class="container p-4">
         <?php
         switch ($page) {
             case 'settings':
-                require __DIR__ . "/settings-panel.php";
+                if ($is_admin)
+                    require __DIR__ . "/settings-panel.php";
+                else
+                    echo "<div class='alert alert-danger'>Yetkisiz erişim.</div>";
                 break;
             case 'pages':
                 require __DIR__ . "/page-panel.php";
@@ -120,6 +178,12 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
                 break;
             case 'modules':
                 require __DIR__ . "/modules-panel.php";
+                break;
+            case 'themes':
+                require __DIR__ . "/themes-panel.php";
+                break;
+            case 'theme-settings':
+                require __DIR__ . "/theme-settings.php";
                 break;
             case 'users':
                 if (!empty($is_admin) && $is_admin)

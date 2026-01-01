@@ -20,7 +20,7 @@ require_once __DIR__ . '/db.php';
         </div>
 
         <div class="col-md-3 d-none d-md-block bg-dark text-white vh-100 p-3">
-            <h5><i class="fa fa-database"></i> Tablolar</h5>
+            <h5><i class="fa fa-database"></i> <span lang="tables"></span></h5>
             <ul class="list-group db-sidebar tables-list" id="tables"></ul>
         </div>
 
@@ -64,8 +64,7 @@ require_once __DIR__ . '/db.php';
             <pre id="sqlResult" class="mt-2 bg-light p-2"></pre>
             <hr>
             <h5 lang="sql_import"></h5>
-            <textarea id="importSql" class="form-control" rows="5"
-                placeholder="CREATE / INSERT / UPDATE / DELETE SQL paste"></textarea>
+            <textarea id="importSql" class="form-control" rows="5" data-placeholder="sql_placeholder"></textarea>
 
             <button class="btn btn-warning mt-2" onclick="importSQL()">
                 <i class="fa fa-upload"></i> <span lang="sql_import_button"></span>

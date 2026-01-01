@@ -1,0 +1,117 @@
+{
+    "title": "Default Theme Management",
+    "fields": [
+        {
+            "id": "header_bg_color",
+            "label": "Navbar alt çizgi Rengi",
+            "type": "color",
+            "default": "navbar-bg"
+        },
+        {
+            "id": "enable_hero_section",
+            "label": "Hero Alanını Göster",
+            "type": "checkbox",
+            "default": "1",
+            "description": "Sayfa başlarında Hero alanını aktif eder."
+        },
+        {
+            "id": "hero_title",
+            "label": "Özel Hero Başlığı",
+            "type": "text",
+            "default": "",
+            "help": "Boş bırakılırsa sayfa başlığı kullanılır."
+        },
+        {
+            "id": "show_sidebar",
+            "label": "Sidebar Göster",
+            "type": "checkbox",
+            "default": "1"
+        },
+        {
+            "id": "sidebar_position",
+            "label": "Sidebar Konumu",
+            "type": "select",
+            "default": "left",
+            "options": {
+                "left": "Sol",
+                "right": "Sağ"
+            }
+        },
+        {
+            "id": "custom_sidebar_text",
+            "label": "Sidebar Hakkımızda Metni",
+            "type": "textarea",
+            "default": "SpeedPage, modern ve hızlı bir CMS çözümüdür."
+        },
+        {
+            "id": "footer_copyright",
+            "label": "Telif Hakkı Metni",
+            "type": "text",
+            "default": "© 2026 SpeedPage"
+        },
+        {
+            "id": "footer_text",
+            "label": "Footer Alt Bilgi",
+            "type": "textarea",
+            "default": "Designed and built with all the love in the world by the SpeedPage team."
+        },
+        {
+            "id": "footer_col1_title",
+            "label": "Footer Sütun 1 Başlık",
+            "type": "text",
+            "default": "Links"
+        },
+        {
+            "id": "footer_col1_links",
+            "label": "Footer Sütun 1 Linkler (Başlık|URL)",
+            "type": "textarea",
+            "default": "Home|/\n",
+            "help": "Her satıra bir link: Başlık|URL"
+        },
+        {
+            "id": "footer_col2_title",
+            "label": "Footer Sütun 2 Başlık",
+            "type": "text",
+            "default": ""
+        },
+        {
+            "id": "footer_col2_links",
+            "label": "Footer Sütun 2 Linkler (Başlık|URL)",
+            "type": "textarea",
+            "default": "",
+            "help": "Her satıra bir link: Başlık|URL"
+        },
+        {
+            "id": "footer_col3_title",
+            "label": "Footer Sütun 3 Başlık",
+            "type": "text",
+            "default": "Projects"
+        },
+        {
+            "id": "footer_col3_links",
+            "label": "Footer Sütun 3 Linkler (Başlık|URL)",
+            "type": "textarea",
+            "default": "SpeedPage|https://github.com/snrj35-dev/SpeedPage\n",
+            "help": "Her satıra bir link: Başlık|URL"
+        },
+        {
+            "id": "footer_col4_title",
+            "label": "Footer Sütun 4 Başlık",
+            "type": "text",
+            "default": ""
+        },
+        {
+            "id": "footer_col4_links",
+            "label": "Footer Sütun 4 Linkler (Başlık|URL)",
+            "type": "textarea",
+            "default": "",
+            "help": "Her satıra bir link: Başlık|URL"
+        },
+        {
+            "id": "enable_social_share",
+            "label": "Paylaşım Butonlarını Göster",
+            "type": "checkbox",
+            "default": "1"
+        }
+    ]
+}

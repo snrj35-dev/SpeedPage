@@ -1,6 +1,14 @@
 <?php
 
 // ---------------------------------------------
+// 0. Global Logger
+// ---------------------------------------------
+require_once __DIR__ . '/php/logger.php';
+require_once __DIR__ . '/php/hooks.php';
+
+// Active Theme Definition MOVED to index.php (Dynamic)
+
+// ---------------------------------------------
 // 1. URL Tabanlı Ayarlar (Tarayıcı için)
 // ---------------------------------------------
 
@@ -43,6 +51,34 @@ if (!function_exists('e')) {
 		if ($str === null)
 			return '';
 		return htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
+	}
+}
+
+// Helper Translation function
+if (!function_exists('__')) {
+	function __($key, ...$args)
+	{
+		static $translations = null;
+		if ($translations === null) {
+			global $db;
+			if (!$db) {
+				require_once ROOT_DIR . 'admin/db.php';
+			}
+			$q = $db->query("SELECT value FROM settings WHERE `key` = 'language'");
+			$lang = $q->fetchColumn() ?: 'tr';
+			$langFile = LANG_DIR . $lang . '.json';
+			if (file_exists($langFile)) {
+				$translations = json_decode(file_get_contents($langFile), true);
+			} else {
+				$translations = [];
+			}
+		}
+
+		$text = $translations[$key] ?? $key;
+		if (!empty($args)) {
+			return vsprintf($text, $args);
+		}
+		return $text;
 	}
 }
 

@@ -55,4 +55,3 @@ $pages = $db->query("
         <?php endforeach; ?>
     </div>
 </div>
-

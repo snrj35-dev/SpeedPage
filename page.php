@@ -1,9 +1,16 @@
 <?php
 header("Content-Type: application/json; charset=utf-8");
 
+session_start();
 require_once __DIR__ . "/settings.php";
 require_once __DIR__ . "/admin/db.php";
 global $db;
+
+// Load settings for theme-init
+$q = $db->query("SELECT `key`, `value` FROM settings");
+$settings = $q->fetchAll(PDO::FETCH_KEY_PAIR);
+
+require_once __DIR__ . "/php/theme-init.php";
 
 $page = $_GET["page"] ?? "home";
 
@@ -47,7 +54,7 @@ if ($row && isset($row['is_active']) && !$row['is_active']) {
 /* Assetleri DB'den çek */
 $assets = [
     "css" => [],
-    "js"  => []
+    "js" => []
 ];
 
 if ($page_id) {
@@ -73,9 +80,12 @@ ob_start();
 include $file;
 $html = ob_get_clean();
 
+// Apply filter hooks
+$html = run_hook('content_filter', $html);
+
 /* JSON Response */
 echo json_encode([
-    "html"   => $html,
+    "html" => $html,
     "assets" => $assets
 ]);
 

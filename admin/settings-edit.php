@@ -24,6 +24,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         'login_captcha' => '0',
         'max_login_attempts' => '5',
         'login_block_duration' => '15',
+        'allow_user_theme' => '0',
     ];
 
 
@@ -31,14 +32,22 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     try {
         $db->beginTransaction();
 
+        // 1. Eski ayarları çek
+        $oldSettings = $db->query("SELECT `key`, `value` FROM settings")->fetchAll(PDO::FETCH_KEY_PAIR);
+
         $stmt = $db->prepare("UPDATE settings SET `value` = ? WHERE `key` = ?");
 
         foreach ($available_settings as $key => $default_value) {
             // Eğer formdan değer gelmişse onu kullan (Checkbox işaretliyse '1' gelir)
             $val = isset($_POST[$key]) ? $_POST[$key] : $default_value;
-
             $stmt->execute([$val, $key]);
         }
+
+        // 2. Yeni ayarları çek (veya oluştur)
+        $newSettings = $db->query("SELECT `key`, `value` FROM settings")->fetchAll(PDO::FETCH_KEY_PAIR);
+
+        // 3. Logla
+        sp_log("Sistem ayarları güncellendi", "settings_update", $oldSettings, $newSettings);
 
         $db->commit();
         header("Location: index.php?status=ok");

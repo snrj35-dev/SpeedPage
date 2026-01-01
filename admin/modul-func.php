@@ -37,138 +37,244 @@ CREATE TABLE IF NOT EXISTS module_assets (
 )
 ");
 
+// Theme Settings Table
+$db->exec("
+CREATE TABLE IF NOT EXISTS theme_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    theme_name TEXT NOT NULL,
+    setting_key TEXT NOT NULL,
+    setting_value TEXT,
+    UNIQUE(theme_name, setting_key)
+)
+");
+
 if ($action === 'upload') {
+    $extractPath = null;
+    try {
+        if (!isset($_FILES['module_zip'])) {
+            throw new Exception("Zip dosyası bulunamadı", 400);
+        }
 
-    if (!isset($_FILES['module_zip'])) {
-        echo json_encode(["status" => "error", "message" => "Zip dosyası bulunamadı", "message_key" => "module_zip_missing"]);
-        exit;
-    }
+        $zipFile = $_FILES['module_zip']['tmp_name'];
+        $zip = new ZipArchive();
 
-    $zipFile = $_FILES['module_zip']['tmp_name'];
-    $extractPath = ROOT_DIR . "modules/tmp_" . time();
+        // Dizin Güvenliği: ZipArchive::open ile başarıyla doğrulandıktan sonra klasörü oluştur
+        if ($zip->open($zipFile) !== true) {
+            throw new Exception("Zip dosyası açılamadı veya geçersiz.", 400);
+        }
 
-    if (!is_dir($extractPath))
-        mkdir($extractPath, 0755, true);
+        // tmp_ klasörünü sadece zip doğrulandıktan sonra oluştur
+        $extractPath = ROOT_DIR . "modules/tmp_" . bin2hex(random_bytes(8));
+        if (!is_dir($extractPath)) {
+            if (!mkdir($extractPath, 0755, true)) {
+                $zip->close();
+                throw new Exception("Geçici dizin oluşturulamadı.", 500);
+            }
+        }
 
-    $zip = new ZipArchive;
-    if ($zip->open($zipFile) === TRUE) {
         $zip->extractTo($extractPath);
         $zip->close();
-    } else {
-        echo json_encode(["status" => "error", "message" => "Zip açılamadı", "message_key" => "zip_open_failed"]);
-        exit;
-    }
 
-    /* ---------------- Read module.json ---------------- */
-    $configFile = $extractPath . "/module.json";
-    if (!file_exists($configFile)) {
-        echo json_encode(["status" => "error", "message" => "module.json bulunamadı", "message_key" => "module_json_missing"]);
-        exit;
-    }
+        /* ---------------- CHECK IF THEME OR MODULE ---------------- */
+        $isTheme = file_exists($extractPath . "/theme.json");
+        $isModule = file_exists($extractPath . "/module.json");
 
-    $config = json_decode(file_get_contents($configFile), true);
-
-    $slug = $config['name'];
-    $title = $config['title'];
-    $description = $config['description'] ?? '';
-    $icon = $config['icon'] ?? '';
-    $version = $config['version'] ?? '1.0';
-
-    $menu_title = $config['menu_title'] ?? $title;
-    $menu_icon = $config['menu_icon'] ?? $icon;
-    $locations = $config['locations'] ?? ['navbar'];
-
-    /* ---------------- Copy page file ---------------- */
-    if (isset($config['page'])) {
-        copy($extractPath . "/" . $config['page'], SAYFALAR_DIR . $config['page']);
-    }
-
-    try {
-        /* ---------------- Insert into pages ---------------- */
-        $sort_order = (int) $db->query("SELECT COALESCE(MAX(sort_order),0)+1 FROM pages")->fetchColumn();
-
-        $stmt = $db->prepare("
-            INSERT INTO pages (slug, title, description, icon, is_active, sort_order)
-            VALUES (?,?,?,?,1,?)
-        ");
-        $stmt->execute([$slug, $title, $description, $icon, $sort_order]);
-
-        $page_id = (int) $db->lastInsertId();
-
-        /* ---------------- Insert page assets ---------------- */
-        $order = 1;
-        if (!empty($config['assets']['css'])) {
-            foreach ($config['assets']['css'] as $css) {
-                $db->prepare("
-                    INSERT INTO page_assets (page_id, type, path, load_order)
-                    VALUES (?,?,?,?)
-                ")->execute([$page_id, 'css', $css, $order++]);
-            }
-        }
-        if (!empty($config['assets']['js'])) {
-            foreach ($config['assets']['js'] as $js) {
-                $db->prepare("
-                    INSERT INTO page_assets (page_id, type, path, load_order)
-                    VALUES (?,?,?,?)
-                ")->execute([$page_id, 'js', $js, $order++]);
-            }
+        if (!$isTheme && !$isModule) {
+            throw new Exception("Ne module.json ne de theme.json bulundu.", 400);
         }
 
-        /* ---------------- Insert menu ---------------- */
-        $stmt = $db->prepare("
-            INSERT INTO menus (page_id, title, icon, sort_order, is_active)
-            VALUES (?,?,?,?,1)
-        ");
-        $stmt->execute([$page_id, $menu_title, $menu_icon, $sort_order]);
+        $configFile = $isTheme ? $extractPath . "/theme.json" : $extractPath . "/module.json";
+        $config = json_decode(file_get_contents($configFile), true);
+        $slug = preg_replace('/[^a-zA-Z0-9_\-]/', '', $config['name'] ?? '');
 
-        $menu_id = (int) $db->lastInsertId();
-
-        /* ---------------- Insert menu locations ---------------- */
-        foreach ($locations as $loc) {
-            $loc = preg_replace('/[^a-z0-9_-]/', '', $loc);
-            $db->prepare("
-                INSERT INTO menu_locations (menu_id, location)
-                VALUES (?,?)
-            ")->execute([$menu_id, $loc]);
+        if (!$slug) {
+            throw new Exception("Paket ismi (name) belirtilmemiş veya geçersiz.", 400);
         }
 
-        /* ---------------- Insert module ---------------- */
-        $stmt = $db->prepare("
-            INSERT INTO modules (name, title, version, description, page_slug)
-            VALUES (?,?,?,?,?)
-        ");
-        $stmt->execute([$slug, $title, $version, $description, $slug]);
+        /* ---------------- SMART MEDIA DISTRIBUTION ---------------- */
+        if (!empty($config['assets']['images']) && is_array($config['assets']['images'])) {
+            $imageTargetBase = $isTheme
+                ? ROOT_DIR . "themes/$slug/images/"
+                : ROOT_DIR . "cdn/images/$slug/";
 
-        $module_id = (int) $db->lastInsertId();
+            foreach ($config['assets']['images'] as $imgRelPath) {
+                // Determine source and handle cross-platform separators
+                $src = $extractPath . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $imgRelPath);
 
-        /* ---------------- Copy CDN assets + module_assets ---------------- */
-        foreach (['css', 'js', 'json'] as $type) {
-            if (!empty($config['cdn'][$type])) {
-                $order = 1;
-                foreach ($config['cdn'][$type] as $file) {
-                    $src = "$extractPath/cdn/$type/$file";
-                    $dst = ROOT_DIR . "cdn/$type/$file";
-                    if (file_exists($src)) {
-                        copy($src, $dst);
-                        $db->prepare("
-                            INSERT INTO module_assets (module_id, type, path, load_order)
-                            VALUES (?,?,?,?)
-                        ")->execute([$module_id, $type, "cdn/$type/$file", $order++]);
+                if (file_exists($src)) {
+                    // Hiyerarşik Kopyalama & mkdir -p
+                    // Remove leading 'images/' if exists to prevent .../images/images/...
+                    $cleanPath = preg_replace('/^images[\/\\\\]/i', '', $imgRelPath);
+                    $dst = $imageTargetBase . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $cleanPath);
+                    $dstDir = dirname($dst);
+
+                    if (!is_dir($dstDir)) {
+                        mkdir($dstDir, 0755, true);
                     }
+                    copy($src, $dst);
                 }
             }
         }
 
-        echo json_encode(["status" => "success", "message" => "Modül başarıyla yüklendi", "message_key" => "module_upload_success"]);
+        if ($isTheme) {
+            /* ============================
+               THEME UPLOAD LOGIC
+               ============================ */
+            $themeDir = ROOT_DIR . "themes/" . $slug;
+            if (!is_dir($themeDir)) {
+                mkdir($themeDir, 0755, true);
+            }
 
+            // Move all files (Hierarchical Copying)
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($extractPath, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::SELF_FIRST
+            );
+
+            foreach ($iterator as $item) {
+                $dest = $themeDir . DIRECTORY_SEPARATOR . $iterator->getSubPathName();
+                if ($item->isDir()) {
+                    if (!is_dir($dest))
+                        mkdir($dest, 0755, true);
+                } else {
+                    copy($item->getRealPath(), $dest);
+                }
+            }
+
+            echo json_encode(["status" => "success", "message" => "Tema başarıyla yüklendi: $slug", "message_key" => "theme_upload_success"]);
+        } else {
+            /* ============================
+               MODULE UPLOAD LOGIC
+               ============================ */
+            $title = $config['title'] ?? $slug;
+            $description = $config['description'] ?? '';
+            $icon = $config['icon'] ?? '';
+            $version = $config['version'] ?? '1.0';
+            $menu_title = $config['menu_title'] ?? $title;
+            $menu_icon = $config['menu_icon'] ?? $icon;
+            $locations = $config['locations'] ?? ['navbar'];
+
+            /* ---------------- Copy page file ---------------- */
+            if (isset($config['page'])) {
+                $pageSrc = $extractPath . DIRECTORY_SEPARATOR . $config['page'];
+                if (file_exists($pageSrc)) {
+                    copy($pageSrc, SAYFALAR_DIR . $config['page']);
+                }
+            }
+
+            // Veritabanı işlemleri (Prepared Statements)
+            $db->beginTransaction();
+            try {
+                $sort_order = (int) $db->query("SELECT COALESCE(MAX(sort_order),0)+1 FROM pages")->fetchColumn();
+
+                $stmt = $db->prepare("INSERT INTO pages (slug, title, description, icon, is_active, sort_order) VALUES (?,?,?,?,1,?)");
+                $stmt->execute([$slug, $title, $description, $icon, $sort_order]);
+                $page_id = (int) $db->lastInsertId();
+
+                if (!empty($config['assets']['css'])) {
+                    $order = 1;
+                    foreach ($config['assets']['css'] as $css) {
+                        $db->prepare("INSERT INTO page_assets (page_id, type, path, load_order) VALUES (?,?,?,?)")->execute([$page_id, 'css', $css, $order++]);
+                    }
+                }
+                if (!empty($config['assets']['js'])) {
+                    $order = 1;
+                    foreach ($config['assets']['js'] as $js) {
+                        $db->prepare("INSERT INTO page_assets (page_id, type, path, load_order) VALUES (?,?,?,?)")->execute([$page_id, 'js', $js, $order++]);
+                    }
+                }
+
+                $stmt = $db->prepare("INSERT INTO menus (page_id, title, icon, sort_order, is_active) VALUES (?,?,?,?,1) ");
+                $stmt->execute([$page_id, $menu_title, $menu_icon, $sort_order]);
+                $menu_id = (int) $db->lastInsertId();
+
+                foreach ($locations as $loc) {
+                    $loc = preg_replace('/[^a-z0-9_-]/', '', $loc);
+                    $db->prepare("INSERT INTO menu_locations (menu_id, location) VALUES (?,?)")->execute([$menu_id, $loc]);
+                }
+
+                $stmt = $db->prepare("INSERT INTO modules (name, title, version, description, page_slug) VALUES (?,?,?,?,?)");
+                $stmt->execute([$slug, $title, $version, $description, $slug]);
+                $module_id = (int) $db->lastInsertId();
+
+                /* ---------------- Copy CDN assets + module_assets ---------------- */
+                foreach (['css', 'js', 'json'] as $type) {
+                    if (!empty($config['cdn'][$type])) {
+                        $order = 1;
+                        foreach ($config['cdn'][$type] as $file) {
+                            $src = $extractPath . DIRECTORY_SEPARATOR . "cdn" . DIRECTORY_SEPARATOR . $type . DIRECTORY_SEPARATOR . $file;
+                            $dst = ROOT_DIR . "cdn/$type/$file";
+                            if (file_exists($src)) {
+                                $dstDir = dirname($dst);
+                                if (!is_dir($dstDir))
+                                    mkdir($dstDir, 0755, true);
+                                copy($src, $dst);
+                                $db->prepare("INSERT INTO module_assets (module_id, type, path, load_order) VALUES (?,?,?,?)")->execute([$module_id, $type, "cdn/$type/$file", $order++]);
+                            }
+                        }
+                    }
+                }
+                $db->commit();
+                echo json_encode(["status" => "success", "message" => "Modül başarıyla yüklendi", "message_key" => "module_upload_success"]);
+            } catch (Exception $dbEx) {
+                $db->rollBack();
+                throw $dbEx;
+            }
+        }
     } catch (Exception $e) {
-        echo json_encode(["status" => "error", "message" => "DB hata: " . $e->getMessage(), "message_key" => "errdata"]);
+        if (ob_get_length())
+            ob_clean();
+        echo json_encode(["status" => "error", "message" => $e->getMessage()]);
+    } finally {
+        // Hata olsa dahi tüm geçici dosyaları temizle (RecursiveDirectoryIterator)
+        if ($extractPath && is_dir($extractPath)) {
+            $files = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($extractPath, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::CHILD_FIRST
+            );
+            foreach ($files as $file) {
+                $file->isDir() ? rmdir($file->getRealPath()) : unlink($file->getRealPath());
+            }
+            rmdir($extractPath);
+        }
+    }
+    exit;
+}
+
+/* ---------------- ACTIVATE THEME ---------------- */ elseif ($action === 'activate_theme') {
+    $themeName = $_POST['theme_name'] ?? 'default';
+
+    // Validate if theme exists
+    if (!is_dir(ROOT_DIR . "themes/" . $themeName) || !file_exists(ROOT_DIR . "themes/" . $themeName . "/theme.json")) {
+        echo json_encode(["status" => "error", "message" => "Tema bulunamadı: $themeName"]);
+        exit;
     }
 
+    try {
+        // Check if active_theme key exists in settings
+        $stmt = $db->prepare("SELECT COUNT(*) FROM settings WHERE `key` = 'active_theme'");
+        $stmt->execute();
+        $exists = $stmt->fetchColumn();
+
+        if ($exists) {
+            $db->prepare("UPDATE settings SET `value` = ? WHERE `key` = 'active_theme'")->execute([$themeName]);
+        } else {
+            $db->prepare("INSERT INTO settings (`key`, `value`) VALUES ('active_theme', ?)")->execute([$themeName]);
+        }
+
+        sp_log("Tema değiştirildi: $themeName", "theme_change");
+        echo json_encode(["status" => "success", "message" => "Tema etkinleştirildi: $themeName"]);
+    } catch (Exception $e) {
+        echo json_encode(["status" => "error", "message" => "DB Error: " . $e->getMessage()]);
+    }
     exit;
 }
 
 /* ---------------- DELETE MODULE ---------------- */ elseif ($action === 'delete') {
+    if (!$is_admin) {
+        echo json_encode(["status" => "error", "message" => "Yetkisiz işlem. Silme yetkiniz yok.", "message_key" => "errdata"]);
+        exit;
+    }
 
     $id = (int) $_POST['id'];
 
@@ -289,5 +395,98 @@ if ($action === 'upload') {
         echo json_encode(["status" => "error", "message" => "DB hata: " . $e->getMessage(), "message_key" => "errdata"]);
     }
 
+    exit;
+}
+
+/* ---------------- DUPLICATE THEME ---------------- */ elseif ($action === 'duplicate_theme') {
+    $source = $_POST['source'] ?? 'default';
+    $newName = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_POST['new_name'] ?? '');
+    $newTitle = strip_tags($_POST['new_title'] ?? $newName);
+
+    if (!$newName) {
+        echo json_encode(["status" => "error", "message" => "Geçersiz tema ismi."]);
+        exit;
+    }
+
+    $sourceDir = ROOT_DIR . "themes/" . $source;
+    $targetDir = ROOT_DIR . "themes/" . $newName;
+
+    if (!is_dir($sourceDir)) {
+        echo json_encode(["status" => "error", "message" => "Kaynak tema bulunamadı."]);
+        exit;
+    }
+
+    if (is_dir($targetDir)) {
+        echo json_encode(["status" => "error", "message" => "Bu isimde bir tema zaten mevcut."]);
+        exit;
+    }
+
+    try {
+        mkdir($targetDir, 0755, true);
+
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($sourceDir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST
+        );
+
+        foreach ($iterator as $item) {
+            $dest = $targetDir . DIRECTORY_SEPARATOR . $iterator->getSubPathName();
+            if ($item->isDir()) {
+                if (!is_dir($dest))
+                    mkdir($dest, 0755, true);
+            } else {
+                copy($item->getRealPath(), $dest);
+            }
+        }
+
+        // Update theme.json in the new theme
+        $jsonPath = $targetDir . "/theme.json";
+        if (file_exists($jsonPath)) {
+            $config = json_decode(file_get_contents($jsonPath), true);
+            $config['name'] = $newName;
+            $config['title'] = $newTitle;
+            file_put_contents($jsonPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        }
+
+        echo json_encode(["status" => "success", "message" => "Tema başarıyla kopyalandı: $newName"]);
+    } catch (Exception $e) {
+        echo json_encode(["status" => "error", "message" => "Kopyalama hatası: " . $e->getMessage()]);
+    }
+    exit;
+}
+
+/* ---------------- DELETE THEME ---------------- */ elseif ($action === 'delete_theme') {
+    $themeName = $_POST['theme_name'] ?? '';
+
+    if ($themeName === 'default') {
+        echo json_encode(["status" => "error", "message" => "Varsayılan tema silinemez."]);
+        exit;
+    }
+
+    $themeDir = ROOT_DIR . "themes/" . $themeName;
+
+    if (!is_dir($themeDir)) {
+        echo json_encode(["status" => "error", "message" => "Tema bulunamadı."]);
+        exit;
+    }
+
+    try {
+        $files = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($themeDir, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+
+        foreach ($files as $file) {
+            $file->isDir() ? rmdir($file->getRealPath()) : unlink($file->getRealPath());
+        }
+        rmdir($themeDir);
+
+        // Also clean settings from DB
+        $db->prepare("DELETE FROM theme_settings WHERE theme_name = ?")->execute([$themeName]);
+
+        echo json_encode(["status" => "success", "message" => "Tema başarıyla silindi."]);
+    } catch (Exception $e) {
+        echo json_encode(["status" => "error", "message" => "Silme hatası: " . $e->getMessage()]);
+    }
     exit;
 }

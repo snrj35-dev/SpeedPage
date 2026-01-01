@@ -96,6 +96,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     /*  DELETE */
     if ($action === 'delete') {
+        if (!$is_admin) {
+            echo json_encode(['ok' => false, 'error' => 'Yetkisiz işlem. Silme yetkiniz yok.']);
+            exit;
+        }
         $id = (int) $_POST['id'];
 
         $db->prepare("DELETE FROM menu_locations WHERE menu_id=?")->execute([$id]);
@@ -205,8 +209,10 @@ foreach ($locRows as $r) {
         </select>
 
         <button class="btn btn-primary btn-sm" onclick="MenuEdit.edit(this)"><i class="fas fa-edit"></i></button>
-        <button class="btn btn-danger btn-sm" onclick="MenuEdit.del(<?= e($m['id']) ?>)"><i
-                class="fas fa-trash"></i></button>
+        <?php if ($is_admin): ?>
+            <button class="btn btn-danger btn-sm" onclick="MenuEdit.del(<?= e($m['id']) ?>)"><i
+                    class="fas fa-trash"></i></button>
+        <?php endif; ?>
 
     </div>
 <?php endforeach; ?>

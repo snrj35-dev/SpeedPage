@@ -12,23 +12,23 @@ try {
 
 <div class="page-panel">
     <div class="d-sm-flex align-items-center justify-content-between mb-4">
-        <h1 class="h3 mb-0 text-gray-800" lang="pages">Sayfalar</h1>
+        <h1 class="h3 mb-0 text-gray-800" lang="pages"></h1>
         <button class="btn btn-primary btn-sm shadow-sm" type="button" data-bs-toggle="collapse"
             data-bs-target="#newSection" aria-expanded="false">
-            <i class="fas fa-plus fa-sm text-white-50"></i> <span lang="new_create_page">Yeni Sayfa</span>
+            <i class="fas fa-plus fa-sm text-white-50"></i> <span lang="new_create_page"></span>
         </button>
     </div>
     <div id="newSection" class="collapse card shadow border-left-primary mb-4">
         <div class="card-header py-3 d-flex justify-content-between align-items-center bg-light">
             <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-plus-circle me-1"></i> <span
-                    lang="new_create_page">Yeni Sayfa</span></h6>
+                    lang="new_create_page"></span></h6>
             <ul class="nav nav-pills card-header-pills" id="pills-tab" role="tablist">
                 <li class="nav-item"><a class="nav-link active py-1 px-3" data-bs-toggle="pill" href="#tab-genel"
-                        lang="pagegenel">Genel</a></li>
+                        lang="pagegenel"></a></li>
                 <li class="nav-item"><a class="nav-link py-1 px-3" data-bs-toggle="pill" href="#tab-tasarim"
-                        lang="pagetasarim">Tasarım</a></li>
+                        lang="pagetasarim"></a></li>
                 <li class="nav-item"><a class="nav-link py-1 px-3" data-bs-toggle="pill" href="#tab-menu"
-                        lang="pagemenu">Menü</a></li>
+                        lang="pagemenu"></a></li>
             </ul>
         </div>
         <div class="card-body">
@@ -116,7 +116,7 @@ try {
 
                 <div class="mt-4 border-top pt-3 d-flex justify-content-end">
                     <button type="submit" class="btn btn-primary px-5 shadow-sm"><i class="fas fa-save me-2"></i> <span
-                            lang="createlang">Sayfayı Kaydet</span></button>
+                            lang="createlang"></span></button>
                 </div>
             </form>
             <div id="sonucMesaji" class="mt-3"></div>
@@ -125,7 +125,7 @@ try {
 
     <div class="card">
         <div class="card-header py-3">
-            <h6 class="m-0"><i class="fas fa-list"></i> <span lang="pageslist">Mevcut Sayfalar</span></h6>
+            <h6 class="m-0"><i class="fas fa-list"></i> <span lang="pageslist"></span></h6>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -155,8 +155,10 @@ try {
                                     <button class="btn btn-action btn-outline-primary edit-btn"
                                         data-slug="<?= e($p['slug']) ?>" title="Düzenle"><i
                                             class="fas fa-edit"></i></button>
-                                    <button class="btn btn-action btn-outline-danger delete-btn"
-                                        data-slug="<?= e($p['slug']) ?>" title="Sil"><i class="fas fa-trash"></i></button>
+                                    <?php if ($is_admin): ?>
+                                        <button class="btn btn-action btn-outline-danger delete-btn"
+                                            data-slug="<?= e($p['slug']) ?>" title="Sil"><i class="fas fa-trash"></i></button>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -173,7 +175,7 @@ try {
     <div class="modal-dialog modal-xl">
         <div class="modal-content shadow-lg border-0">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title"><i class="fas fa-edit me-2"></i> <span lang="edit_page">Sayfayı Düzenle</span>
+                <h5 class="modal-title"><i class="fas fa-edit me-2"></i> <span lang="edit_page"></span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
@@ -195,8 +197,8 @@ try {
                                     id="edit_description" class="form-control"></div>
                             <div class="col-md-4 mb-3"><label class="form-label" lang="active">Durum</label><select
                                     name="is_active" id="edit_is_active" class="form-select">
-                                    <option value="1">Aktif</option>
-                                    <option value="0">Pasif</option>
+                                    <option value="1" lang="yes"></option>
+                                    <option value="0" lang="no"></option>
                                 </select></div>
                         </div>
                     </div>
@@ -222,9 +224,9 @@ try {
                 </form>
             </div>
             <div class="modal-footer border-0 shadow-sm">
-                <button class="btn btn-outline-secondary px-4" data-bs-dismiss="modal" lang="exitlang">Vazgeç</button>
+                <button class="btn btn-outline-secondary px-4" data-bs-dismiss="modal" lang="vazgecland">Vazgeç</button>
                 <button class="btn btn-primary px-5 shadow-sm" id="saveEdit"><i class="fas fa-check me-2"></i> <span
-                        lang="savelang">Güncelle</span></button>
+                        lang="savelang"></span></button>
             </div>
         </div>
     </div>
