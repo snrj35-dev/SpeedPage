@@ -63,7 +63,67 @@ if ($action === 'upload') {
             throw new Exception("Zip dosyası açılamadı veya geçersiz.", 400);
         }
 
-        // tmp_ klasörünü sadece zip doğrulandıktan sonra oluştur
+        /* ---------------- PRE-EXTRACTION VALIDATION ---------------- */
+        $configContent = '';
+        $isTheme = false;
+        $isModule = false;
+
+        // 1. Config Dosyasını Ara (ZIP açılmadan)
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $name = $zip->getNameIndex($i);
+            if ($name === 'theme.json') {
+                $isTheme = true;
+                $configContent = $zip->getFromIndex($i);
+            } elseif ($name === 'module.json') {
+                $isModule = true;
+                $configContent = $zip->getFromIndex($i);
+            }
+
+            // 2. Güvenlik Kontrolü: Dosya yolları (Traversal & Core Overwrite)
+            $fileName = basename($name);
+            $forbidden = ['index.php', 'settings.php', 'db.php', 'auth.php', '.htaccess', 'manifest.json', 'service-worker.js', 'page.php'];
+
+            // Directory Traversal check
+            if (strpos($name, '..') !== false || strpos($name, '/') === 0 || strpos($name, '\\') === 0) {
+                throw new Exception("Güvenlik Hatası: Geçersiz dosya yolu tespit edildi (Traversal).");
+            }
+
+            // Core file overwrite prevention (at zip root)
+            if (in_array(strtolower($fileName), $forbidden) && !strpos($name, '/') && !strpos($name, '\\')) {
+                // Not: Temalar için index.php istisna olabilir ama genel güvenlik için kök dizinde bu isimleri yasaklıyoruz.
+                // Paket yapısında bunlar bir alt klasörde veya isimleri farklı olmalıdır.
+                throw new Exception("Güvenlik Hatası: Sistem çekirdek dosyası ismiyle ('$fileName') çakışan dosya tespit edildi.");
+            }
+        }
+
+        if (!$isTheme && !$isModule) {
+            throw new Exception("Geçersiz Paket: module.json veya theme.json bulunamadı.", 400);
+        }
+
+        $config = json_decode($configContent, true);
+        if (!$config) {
+            throw new Exception("Yapılandırma Hatası: JSON dosyası okunamadı veya hatalı.", 400);
+        }
+
+        // 3. PHP Sürüm Kontrolü
+        if (!empty($config['php_version'])) {
+            if (version_compare(PHP_VERSION, $config['php_version'], '<')) {
+                throw new Exception("PHP Sürüm Hatası: Bu paket en az v" . $config['php_version'] . " gerektiriyor. Sistem Sürümü: " . PHP_VERSION);
+            }
+        }
+
+        // 4. Bağımlılık (Dependencies) Kontrolü
+        if ($isModule && !empty($config['dependencies']) && is_array($config['dependencies'])) {
+            foreach ($config['dependencies'] as $dep) {
+                $stmt = $db->prepare("SELECT id FROM modules WHERE name = ? AND is_active = 1");
+                $stmt->execute([$dep]);
+                if (!$stmt->fetch()) {
+                    throw new Exception("Bağımlılık Hatası: Bu modülün çalışması için '$dep' modülünün yüklü ve aktif olması gerekir.");
+                }
+            }
+        }
+
+        // 5. Geçici dizin oluştur ve çıkart
         $extractPath = ROOT_DIR . "modules/tmp_" . bin2hex(random_bytes(8));
         if (!is_dir($extractPath)) {
             if (!mkdir($extractPath, 0755, true)) {
@@ -74,17 +134,6 @@ if ($action === 'upload') {
 
         $zip->extractTo($extractPath);
         $zip->close();
-
-        /* ---------------- CHECK IF THEME OR MODULE ---------------- */
-        $isTheme = file_exists($extractPath . "/theme.json");
-        $isModule = file_exists($extractPath . "/module.json");
-
-        if (!$isTheme && !$isModule) {
-            throw new Exception("Ne module.json ne de theme.json bulundu.", 400);
-        }
-
-        $configFile = $isTheme ? $extractPath . "/theme.json" : $extractPath . "/module.json";
-        $config = json_decode(file_get_contents($configFile), true);
         $slug = preg_replace('/[^a-zA-Z0-9_\-]/', '', $config['name'] ?? '');
 
         if (!$slug) {
@@ -141,6 +190,7 @@ if ($action === 'upload') {
                 }
             }
 
+            sp_log("Tema başarıyla yüklendi: $slug", "theme_upload", $slug);
             echo json_encode(["status" => "success", "message" => "Tema başarıyla yüklendi: $slug", "message_key" => "theme_upload_success"]);
         } else {
             /* ============================
@@ -159,6 +209,41 @@ if ($action === 'upload') {
                 $pageSrc = $extractPath . DIRECTORY_SEPARATOR . $config['page'];
                 if (file_exists($pageSrc)) {
                     copy($pageSrc, SAYFALAR_DIR . $config['page']);
+                }
+            }
+
+            /* ---------------- Copy uninstall script ---------------- */
+            $uninstallFileNames = ["uninstall.php", "uninstall_" . $slug . ".php"];
+            foreach ($uninstallFileNames as $uName) {
+                $uSrc = $extractPath . DIRECTORY_SEPARATOR . $uName;
+                if (file_exists($uSrc)) {
+                    copy($uSrc, SAYFALAR_DIR . "uninstall_" . $slug . ".php");
+                    break;
+                }
+            }
+
+            // --- DATABASE MIGRATIONS (Pre-DB Commit) ---
+            // 1. Execute schema.sql if exists
+            $schemaFile = $extractPath . DIRECTORY_SEPARATOR . 'schema.sql';
+            if (file_exists($schemaFile)) {
+                $sql = file_get_contents($schemaFile);
+                if (!empty(trim($sql))) {
+                    try {
+                        $db->exec($sql);
+                    } catch (Exception $e) {
+                        throw new Exception("SQL Migration Hatası: " . $e->getMessage());
+                    }
+                }
+            }
+
+            // 2. Execute migration.php if exists
+            $migrationFile = $extractPath . DIRECTORY_SEPARATOR . 'migration.php';
+            if (file_exists($migrationFile)) {
+                try {
+                    // Let the migration file use $db global variable
+                    include $migrationFile;
+                } catch (Exception $e) {
+                    throw new Exception("PHP Migration Hatası: " . $e->getMessage());
                 }
             }
 
@@ -215,6 +300,7 @@ if ($action === 'upload') {
                     }
                 }
                 $db->commit();
+                sp_log("Modül başarıyla yüklendi: $slug (v$version)", "module_upload", $slug);
                 echo json_encode(["status" => "success", "message" => "Modül başarıyla yüklendi", "message_key" => "module_upload_success"]);
             } catch (Exception $dbEx) {
                 $db->rollBack();
@@ -224,6 +310,7 @@ if ($action === 'upload') {
     } catch (Exception $e) {
         if (ob_get_length())
             ob_clean();
+        sp_log("Paket yükleme hatası: " . $e->getMessage(), "system_error", null, ["action" => "upload"]);
         echo json_encode(["status" => "error", "message" => $e->getMessage()]);
     } finally {
         // Hata olsa dahi tüm geçici dosyaları temizle (RecursiveDirectoryIterator)
@@ -315,30 +402,64 @@ if ($action === 'upload') {
         $db->prepare("DELETE FROM pages WHERE id=?")->execute([$page_id]);
     }
 
-    /* ---------------- Physical file cleanup ---------------- */
-    // Delete page file
-    $pageFile = SAYFALAR_DIR . $slug . ".php";
-    if (file_exists($pageFile)) {
-        @unlink($pageFile);
-    }
+    // Release any locks by closing previous statements
+    if (isset($stmt))
+        $stmt->closeCursor();
+    if (isset($menus))
+        $menus->closeCursor();
+    unset($stmt, $menus, $module, $page);
 
-    // Delete CDN assets via module_assets
-    $stmt = $db->prepare("SELECT type, path FROM module_assets WHERE module_id=?");
-    $stmt->execute([$id]);
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $asset) {
+    /* ---------------- Physical file cleanup ---------------- */
+    // 1. Fetch CDN assets first
+    $stmtAssets = $db->prepare("SELECT path FROM module_assets WHERE module_id=?");
+    $stmtAssets->execute([$id]);
+    $assetsToDelete = $stmtAssets->fetchAll(PDO::FETCH_ASSOC);
+    $stmtAssets->closeCursor();
+
+    // 2. Delete data from DB tables (Except the module itself, to keep slug ref for uninstall)
+    // Already deleted pages, menus etc above.
+
+    // 3. Delete CDN assets files
+    foreach ($assetsToDelete as $asset) {
         $target = ROOT_DIR . $asset['path'];
         if (is_file($target)) {
             @unlink($target);
         }
     }
 
-    // Delete module_assets entries
+    // 4. Delete module record and assets record
     $db->prepare("DELETE FROM module_assets WHERE module_id=?")->execute([$id]);
-
-    // Delete module record
     $db->prepare("DELETE FROM modules WHERE id=?")->execute([$id]);
 
-    // Delete tmp_xxxxx folders in modules dir
+    // 5. Delete page file
+    $pageFile = SAYFALAR_DIR . $slug . ".php";
+    if (file_exists($pageFile)) {
+        @unlink($pageFile);
+    }
+
+    // --- CRITICAL LOCK BREAKER: REFRESH CONNECTION ---
+    // Unset all objects and close connection to force SQLite to release ALL locks
+    unset($stmt, $stmtAssets, $stmtAssets, $menus, $module, $page, $assetsToDelete);
+    $db = null;
+
+    // Re-connect
+    require ROOT_DIR . 'admin/db.php';
+
+    // --- UNINSTALL LOGIC (LAST STEP) ---
+    // We run this at the very end when all other DB locks are released.
+    $uninstallFile = SAYFALAR_DIR . "uninstall_" . $slug . ".php";
+    if (file_exists($uninstallFile)) {
+        try {
+            global $db;
+            include $uninstallFile;
+            @unlink($uninstallFile);
+            sp_log("Temizlik betiği başarıyla çalıştırıldı: $slug", "module_uninstall_ok", $slug);
+        } catch (Exception $e) {
+            sp_log("Uninstallation Script Hatası ($slug): " . $e->getMessage(), "system_error");
+        }
+    }
+
+    // Delete tmp_xxxxx folders
     $modulesTmp = ROOT_DIR . "modules/";
     foreach (glob($modulesTmp . "tmp_*") as $tmpDir) {
         if (is_dir($tmpDir)) {
@@ -353,6 +474,7 @@ if ($action === 'upload') {
         }
     }
 
+    sp_log("Modül silindi: $slug (ID: $id)", "module_delete", $slug);
     echo json_encode(["status" => "success", "message" => "Modül ve dosyaları tamamen silindi", "message_key" => "module_uninstalled"]);
     exit;
 }
@@ -390,6 +512,7 @@ if ($action === 'upload') {
             $db->prepare("UPDATE menus SET is_active=? WHERE page_id=?")->execute([$newState, $page_id]);
         }
 
+        sp_log("Modül durumu değiştirildi: $slug (" . ($newState ? "Aktif" : "Pasif") . ")", "module_toggle", $slug);
         echo json_encode(["status" => "success", "message" => ($newState ? "Modül etkinleştirildi" : "Modül devre dışı bırakıldı"), "message_key" => ($newState ? "module_activated" : "module_deactivated"), "is_active" => $newState]);
     } catch (Exception $e) {
         echo json_encode(["status" => "error", "message" => "DB hata: " . $e->getMessage(), "message_key" => "errdata"]);
@@ -448,6 +571,7 @@ if ($action === 'upload') {
             file_put_contents($jsonPath, json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         }
 
+        sp_log("Tema kopyalandı: $source -> $newName", "theme_duplicate", $newName);
         echo json_encode(["status" => "success", "message" => "Tema başarıyla kopyalandı: $newName"]);
     } catch (Exception $e) {
         echo json_encode(["status" => "error", "message" => "Kopyalama hatası: " . $e->getMessage()]);
@@ -484,9 +608,26 @@ if ($action === 'upload') {
         // Also clean settings from DB
         $db->prepare("DELETE FROM theme_settings WHERE theme_name = ?")->execute([$themeName]);
 
+        sp_log("Tema silindi: $themeName", "theme_delete", $themeName);
         echo json_encode(["status" => "success", "message" => "Tema başarıyla silindi."]);
     } catch (Exception $e) {
         echo json_encode(["status" => "error", "message" => "Silme hatası: " . $e->getMessage()]);
+    }
+    exit;
+}
+
+/* ---------------- CLEAR ALL LOGS ---------------- */ elseif ($action === 'clear_logs') {
+    if (!$is_admin) {
+        echo json_encode(["status" => "error", "message" => "Yetkisiz işlem."]);
+        exit;
+    }
+
+    try {
+        $db->exec("DELETE FROM logs");
+        sp_log("Sistem denetim logları manuel olarak temizlendi.", "logs_clear");
+        echo json_encode(["status" => "success", "message" => "Tüm log kayıtları başarıyla silindi."]);
+    } catch (Exception $e) {
+        echo json_encode(["status" => "error", "message" => "Log silme hatası: " . $e->getMessage()]);
     }
     exit;
 }

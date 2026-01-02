@@ -2,20 +2,23 @@
 ob_start();
 require_once 'settings.php';
 require_once 'admin/db.php';
-require_once 'php/menu-loader.php';
+
+$q = $db->query("SELECT `key`, `value` FROM settings");
+$settings = $q->fetchAll(PDO::FETCH_KEY_PAIR);
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-/** * ✅ PDO::FETCH_KEY_PAIR kullanımı:
- * Bu metod, SELECT ile çekilen ilk sütunu ('key') anahtar, 
- * ikinci sütunu ('value') ise değer yaparak doğrudan bir dizi oluşturur.
- */
-$q = $db->query("SELECT `key`, `value` FROM settings");
-$settings = $q->fetchAll(PDO::FETCH_KEY_PAIR);
+// ✅ Admin için hata gösterimini aç (Geliştirme kolaylığı)
+if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
+    ini_set('display_errors', 1);
+    error_reporting(E_ALL);
+}
 
+require_once 'php/menu-loader.php';
 require_once 'php/theme-init.php';
+run_hook('init');
 
 /**
  * ✅ Yönlendirme Kontrolü
@@ -144,7 +147,9 @@ if (!empty($_GET['page'])) {
 
     <script src="<?= CDN_URL ?>js/router.js"></script>
     <script src="<?= CDN_URL ?>js/bootstrap.bundle.min.js"></script>
-    <script src="<?= CDN_URL ?>js/dark.js"></script>
+    <?php if (ACTIVE_THEME !== 'fantastik'): ?>
+        <script src="<?= CDN_URL ?>js/dark.js"></script>
+    <?php endif; ?>
     <script src="<?= CDN_URL ?>js/lang.js"></script>
 
     <script>

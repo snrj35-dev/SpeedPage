@@ -49,20 +49,17 @@ This project is a hobby work. Although many security measures (XSS protection, S
 
 ---
 
-## 📦 Plugins Structure
-The `plugins` folder contains three subfolders:  
+## 📦 [SpeedPage-modul-theme](https://github.com/snrj35-dev/SpeedPage-modul-theme) 
 
-- **modules/** → Example modules:  
-  - `musicbox`  
-  - `mediacenter`  
-  - `kitaplik`  
+- **module/** → Ready-made modules can be downloaded from the link above and installed via the admin panel.  
+  
+- **theme/** → Ready-made themes are available in the external repository.  
+  - The default theme is already integrated.  
+  - New themes can be downloaded from the repository and uploaded as ZIP files through the admin panel.
 
-- **themes/** → Currently empty.  
-  - Default theme integrated.  
-  - Admin panel allows copying the default theme or uploading new themes as ZIP files.  
+- **tools/** → Tools can be downloaded here and run on your system.  
+  - `onar.php` → **Repair Tool** (⚠️ Resets the database and deletes test data. Use only before publishing or cleaning up. Do not keep this file on production servers.)
 
-- **tools/** → Utility scripts.  
-  - `onar.php` → **Repair Tool** (⚠️ Resets the database and deletes test data. Use only before publishing or cleaning up. Do not keep this file on production servers.)  
 
 ---
 
@@ -124,20 +121,17 @@ Bu proje bir hobi çalışmasıdır. Birçok güvenlik önlemi (XSS koruması, S
 
 ---
 
-## 📦 Plugins Yapısı
-Yeni sistemde `plugins` klasörü altında üç alt klasör bulunur:  
+## 📦 [SpeedPage-modul-theme](https://github.com/snrj35-dev/SpeedPage-modul-theme) 
 
-- **modules/** → Örnek modüller:  
-  - `musicbox`  
-  - `mediacenter`  
-  - `kitaplik`  
+- **modul/** → Hazır Modüller üstteki linkten indirip admin panelden yükleyebilirsiniz.  
+  
+- **theme/** → Hazır Temalar harici repodan indirilir.  
+  - Varsayılan tema entegre edilmiştir.  
+  - Yeni temaları reposundan indirip ZIP olarak admin panelden yükleyebilirsiniz.
 
-- **themes/** → Şimdilik boş.  
-  - Default tema entegre.  
-  - Admin panelden default temayı kopyalayabilir veya ZIP yükleyerek yeni tema ekleyebilirsiniz.  
+- **tools/** → Araçlar buradan indirip sisteminizde çalıştırabilirsiniz.  
+  - `onar.php` → **Onarım Aracı** (⚠️ Veritabanını sıfırlar ve test verilerini siler. Yalnızca yayına çıkmadan önce veya temizlik için kullanın. Production ortamında tutmayın.)
 
-- **tools/** → Yardımcı araçlar.  
-  - `onar.php` → **Onarım Aracı** (⚠️ Veritabanını sıfırlar, test verilerini siler. Sadece GitHub öncesi temizlik için kullanın, production’da tutmayın).  
 
 ---
 

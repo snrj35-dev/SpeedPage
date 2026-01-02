@@ -7,6 +7,19 @@ require_once __DIR__ . '/php/logger.php';
 require_once __DIR__ . '/php/hooks.php';
 
 // Active Theme Definition MOVED to index.php (Dynamic)
+define('DEBUG', false); // Geliştirme aşamasında true, yayında false yapın
+
+error_reporting(E_ALL); // Tüm hataları yakala (Hata yakalayıcıya gönder)
+
+if (DEBUG) {
+	ini_set('display_errors', 1);
+} else {
+	ini_set('display_errors', 0);
+}
+
+// ✅ Global Hata Yakalayıcıları Kaydet
+set_error_handler('sp_error_handler');
+set_exception_handler('sp_exception_handler');
 
 // ---------------------------------------------
 // 1. URL Tabanlı Ayarlar (Tarayıcı için)

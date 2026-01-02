@@ -118,9 +118,31 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
                             <?= e($field['label']) ?>
                         </label>
 
-                        <?php if ($field['type'] === 'text'): ?>
-                            <input type="text" name="<?= e($field['id']) ?>" class="form-control"
-                                value="<?= e($currentValues[$field['id']] ?? $field['default'] ?? '') ?>">
+                        <?php if (in_array($field['type'], ['text', 'email', 'url', 'number'])): ?>
+                            <input type="<?= e($field['type']) ?>" name="<?= e($field['id']) ?>" class="form-control"
+                                value="<?= e($currentValues[$field['id']] ?? $field['default'] ?? '') ?>"
+                                <?php if($field['type'] === 'number'): ?>
+                                    min="<?= e($field['min'] ?? '') ?>" max="<?= e($field['max'] ?? '') ?>" step="<?= e($field['step'] ?? '1') ?>"
+                                <?php endif; ?>>
+
+                        <?php elseif ($field['type'] == 'image'): 
+                            $val = $currentValues[$field['id']] ?? $field['default'] ?? '';
+                        ?>
+                            <div class="image-picker-container" data-id="<?= e($field['id']) ?>">
+                                <div class="input-group mb-2 shadow-sm rounded-3">
+                                    <span class="input-group-text bg-white border-end-0"><i class="fas fa-image text-muted"></i></span>
+                                    <input type="text" name="<?= e($field['id']) ?>" class="form-control border-start-0 image-url-input" 
+                                        value="<?= e($val) ?>" placeholder="https://... veya /media/...">
+                                </div>
+                                <div class="preview-wrapper bg-light rounded-3 d-flex align-items-center justify-content-center p-2" style="min-height: 60px; border: 1px dashed #ddd;">
+                                    <?php if($val): ?>
+                                        <img src="<?= e($val) ?>" class="img-fluid rounded preview-img" style="max-height: 120px;">
+                                    <?php else: ?>
+                                        <div class="text-muted small no-preview"><i class="fas fa-eye-slash me-1"></i> <?= __('no_preview') ?></div>
+                                        <img src="" class="img-fluid rounded preview-img d-none" style="max-height: 120px;">
+                                    <?php endif; ?>
+                                </div>
+                            </div>
 
                         <?php elseif ($field['type'] === 'textarea'): ?>
                             <textarea name="<?= e($field['id']) ?>" class="form-control"
@@ -168,6 +190,35 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+
+                        <?php elseif ($field['type'] === 'radio'): 
+                            $val = $currentValues[$field['id']] ?? $field['default'] ?? '';
+                        ?>
+                            <div class="mt-2 d-flex flex-wrap gap-3">
+                                <?php foreach ($field['options'] as $optVal => $optLabel): ?>
+                                    <div class="form-check custom-radio-card p-0">
+                                        <input class="form-check-input d-none" type="radio" name="<?= e($field['id']) ?>" 
+                                            id="radio_<?= e($field['id'] . $optVal) ?>" value="<?= e($optVal) ?>"
+                                            <?= $val == $optVal ? 'checked' : '' ?>>
+                                        <label class="form-check-label btn btn-sm btn-outline-secondary px-3 rounded-pill" for="radio_<?= e($field['id'] . $optVal) ?>">
+                                            <?= e($optLabel) ?>
+                                        </label>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+
+                        <?php elseif ($field['type'] === 'range'): 
+                            $val = $currentValues[$field['id']] ?? $field['default'] ?? '0';
+                            $min = $field['min'] ?? '0';
+                            $max = $field['max'] ?? '100';
+                            $step = $field['step'] ?? '1';
+                        ?>
+                            <div class="d-flex align-items-center gap-3">
+                                <input type="range" name="<?= e($field['id']) ?>" class="form-range flex-grow-1" 
+                                    min="<?= e($min) ?>" max="<?= e($max) ?>" step="<?= e($step) ?>" 
+                                    value="<?= e($val) ?>" oninput="this.nextElementSibling.innerText = this.value">
+                                <span class="badge bg-secondary rounded-pill px-3" style="min-width: 45px;"><?= e($val) ?></span>
+                            </div>
                         <?php endif; ?>
 
                         <?php if (!empty($field['help'])): ?>
@@ -221,5 +272,26 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
                 }
             });
         });
+
+        // Image Preview Logic
+        const imageInputs = document.querySelectorAll('.image-url-input');
+        imageInputs.forEach(input => {
+            input.addEventListener('input', (e) => {
+                const val = e.target.value;
+                const container = e.target.closest('.image-picker-container');
+                const img = container.querySelector('.preview-img');
+                const noPrev = container.querySelector('.no-preview');
+                
+                if (val && (val.startsWith('http') || val.startsWith('/') || val.length > 5)) {
+                    img.src = val;
+                    img.classList.remove('d-none');
+                    if(noPrev) noPrev.classList.add('d-none');
+                } else {
+                    img.classList.add('d-none');
+                    if(noPrev) noPrev.classList.remove('d-none');
+                }
+            });
+        });
     });
 </script>
+```

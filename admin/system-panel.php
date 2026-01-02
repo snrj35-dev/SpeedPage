@@ -6,7 +6,6 @@ require_once __DIR__ . '/../settings.php';
  */
 
 $startTime = microtime(true);
-header('X-Content-Type-Options: nosniff');
 
 $data = [];
 
@@ -332,9 +331,14 @@ if (isset($_GET['ajax'])) {
 
 <!-- LOG & AUDIT TABLOSU -->
 <div class="card mt-4 shadow-sm">
-    <div class="card-header bg-light d-flex justify-content-between align-items-center">
-        <h6 class="m-0 text-primary"><i class="fas fa-history me-2"></i> <span lang="audit_logs">Denetim Logları (Son
-                100)</span></h6>
+    <div class="card-header bg-light d-flex justify-content-between align-items-center py-3">
+        <h6 class="m-0 text-primary fw-bold">
+            <i class="fas fa-history me-2"></i>
+            <span lang="audit_logs">Denetim Logları (Son 100)</span>
+        </h6>
+        <button class="btn btn-sm btn-outline-danger rounded-pill px-3" onclick="confirmClearLogs()">
+            <i class="fas fa-trash-alt me-1"></i> <span lang="clear">Temizle</span>
+        </button>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -367,7 +371,8 @@ if (isset($_GET['ajax'])) {
                                         'login_success' => 'bg-success',
                                         'page_edit' => 'bg-primary',
                                         'settings_update' => 'bg-warning text-dark',
-                                        'system_error' => 'bg-dark'
+                                        'system_error' => 'bg-dark',
+                                        'php_exception' => 'bg-danger'
                                     ];
                                     $bg = $badges[$log['action_type']] ?? 'bg-secondary';
                                     ?>
@@ -440,5 +445,31 @@ if (isset($_GET['ajax'])) {
 
         const modal = new bootstrap.Modal(document.getElementById('logDetailModal'));
         modal.show();
+    }
+
+    function confirmClearLogs() {
+        if (!confirm("Tüm log kayıtları kalıcı olarak silinecektir. Bu işlemi onaylıyor musunuz?")) return;
+
+        const formData = new FormData();
+        formData.append('action', 'clear_logs');
+        formData.append('csrf', '<?= $_SESSION['csrf'] ?>');
+
+        fetch('modul-func.php', {
+            method: 'POST',
+            body: formData
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    alert(data.message);
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert("İşlem sırasında bir hata oluştu.");
+            });
     }
 </script>

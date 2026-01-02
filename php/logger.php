@@ -7,6 +7,19 @@ if (!function_exists('sp_log')) {
     function ensure_log_table()
     {
         global $db;
+        if (!$db) {
+            $db_file = __DIR__ . '/../admin/veritabanı/data.db';
+            if (file_exists($db_file)) {
+                try {
+                    $db = new PDO("sqlite:" . $db_file);
+                    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                } catch (Exception $e) {
+                    return;
+                }
+            } else {
+                return;
+            }
+        }
         $db->exec("
             CREATE TABLE IF NOT EXISTS logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,6 +76,54 @@ if (!function_exists('sp_log')) {
             $stmt->execute([(int) $days]);
         } catch (Exception $e) {
             error_log("Log Cleanup Error: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * PHP Hatalarını Yakalar ve Veritabanına Loglar
+     */
+    function sp_error_handler($errno, $errstr, $errfile, $errline)
+    {
+        if (!(error_reporting() & $errno))
+            return false;
+
+        $type_map = [
+            E_ERROR => 'PHP_ERROR_FATAL',
+            E_WARNING => 'PHP_WARNING',
+            E_NOTICE => 'PHP_NOTICE',
+            E_USER_ERROR => 'PHP_USER_ERROR',
+            E_USER_WARNING => 'PHP_USER_WARNING',
+            E_USER_NOTICE => 'PHP_USER_NOTICE',
+            E_DEPRECATED => 'PHP_DEPRECATED',
+        ];
+
+        $type = $type_map[$errno] ?? 'PHP_ERROR_UNKNOWN';
+        $data = ['file' => $errfile, 'line' => $errline, 'type' => $type];
+
+        sp_log("[$type] $errstr", 'system_error', null, $data);
+
+        return defined('DEBUG') && DEBUG === true ? false : true;
+    }
+
+    /**
+     * Yakalanmamış İstisnaları (Exceptions) Yakalar ve Veritabanına Loglar
+     */
+    function sp_exception_handler($exception)
+    {
+        $data = [
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+            'trace' => $exception->getTraceAsString()
+        ];
+
+        sp_log("[Exception] " . $exception->getMessage(), 'php_exception', null, $data);
+
+        if (defined('DEBUG') && DEBUG === true) {
+            echo "<h2>Unhandled Exception</h2><p><b>" . $exception->getMessage() . "</b></p><pre>" . $exception->getTraceAsString() . "</pre>";
+        } else {
+            if (!headers_sent())
+                http_response_code(500);
+            echo "Sistemde bir hata oluştu. Lütfen daha sonra tekrar deneyin.";
         }
     }
 }
