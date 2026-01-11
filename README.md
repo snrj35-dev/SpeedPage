@@ -25,6 +25,21 @@ This project is a hobby work. Although many security measures (XSS protection, S
 5. Open the project in your browser and start using it.  
 
 ---
+🚀 Updates (v0.2 Alpha)
+Admin AI Assistant
+
+Integrated into the panel, capable of analyzing code errors and applying small patches directly to files.
+
+    Note: Marked.js  and Highlight.js  libraries are added for visual comfort.
+
+Smart Maintenance (Self-Maintenance)
+
+Supports WAL mode to prevent database locks and offers one-click AI table recovery.
+Error Capture
+
+Enhanced hook system that detects PHP-based critical errors and reports them to the AI Panel.
+
+---
 
 ## 🚀 Features
 - **SQLite DB** → Lightweight, fast, optimized for local usage.  
@@ -38,7 +53,9 @@ This project is a hobby work. Although many security measures (XSS protection, S
   - User management (Admin / Editor / User roles)  
   - File manager (manage files/folders, upload/extract ZIP, basic text editor)  
   - Database panel (live SQLite table management)  
-  - System panel (detailed system information)  
+  - System panel (detailed system information)
+  - **Database Migration Wizard** → Easily migrate from SQLite to MySQL without data loss.
+  - **Admin AI Assistant** → AI-powered helper for debugging, code refactoring, and general assistance directly within the admin panel.  
 - **PWA Compatibility** → Offline functionality with `manifest.json` + `service-worker.js`.  
 - **Multi-language Support** → JSON-based `lang.js` (TR/EN ready, easily expandable).  
 - **Profile Management** → Avatar selection, display name changes.  
@@ -58,15 +75,18 @@ This project is a hobby work. Although many security measures (XSS protection, S
   - New themes can be downloaded from the repository and uploaded as ZIP files through the admin panel.
 
 - **tools/** → Tools can be downloaded here and run on your system.  
-  - `onar.php` → **Repair Tool** (⚠️ Resets the database and deletes test data. Use only before publishing or cleaning up. Do not keep this file on production servers.)
+      onar.php  → Repair Tool: Checks folder structure, creates missing tables, and stabilizes the system.
+    ⚠️ Don’t forget to remove it before going live.
 
 
 ---
 
 ## 🛠️ Technologies Used
-- **Backend:** PHP 8+, SQLite  
-- **Frontend:** Modular JS (`menu.js`, `modules.js`, `pages.js`, etc.)  
-- **UI/UX:** CSS (Minimalist and functional design)  
+    Backend: PHP 8+, SQLite
+
+    Frontend: Bootstrap, FontAwesome, and minimalist helpers for the AI interface (Marked, HighlightJS)
+
+    AI: OpenRouter or any OpenAI-compatible API (optional)  
 
 ---
 
@@ -97,7 +117,16 @@ Bu proje bir hobi çalışmasıdır. Birçok güvenlik önlemi (XSS koruması, S
 5. Tarayıcıdan projenizi açın ve kullanmaya başlayın.  
 
 ---
+🚀 Yenilikler (v0.2 Alpha)
 
+    Admin AI Asistanı: Panel içine entegre, kod hatalarını analiz edebilen ve dosyalara küçük yamalar (patch) uygulayabilen yardımcı.
+
+        Not: Görsel konfor için marked.js ve highlight.js kütüphaneleri eklenmiştir.
+
+    Akıllı Bakım (Self-Maintenance): Sistem, yapılan işlemlerden sonra logları ve eski yedekleri otomatik temizleyerek veritabanını şişirmez.
+
+    Hata Yakalama: PHP tabanlı kritik hataları yakalayıp AI Paneline raporlayan geliştirilmiş hook sistemi.
+---
 ## 🚀 Özellikler
 - **SQLite DB** → Hafif, hızlı, local kullanım için optimize.  
 - **Modüler Mimari** → Sayfa, menü, modül ve asset bazlı yönetim.  
@@ -110,7 +139,9 @@ Bu proje bir hobi çalışmasıdır. Birçok güvenlik önlemi (XSS koruması, S
   - Kullanıcı yönetimi (Admin / Editor / User rolleri)  
   - Dosya yöneticisi (dosya/klasör işlemleri, ZIP yükleme/çıkarma, basit editör)  
   - Veritabanı paneli (SQLite tablolarını canlı yönetim)  
-  - Sistem paneli (detaylı sistem bilgileri)  
+  - Sistem paneli (detaylı sistem bilgileri)
+  - **Veritabanı Taşıma Sihirbazı** → SQLite veritabanınızı veri kaybı olmadan MySQL'e kolayca taşıyın.
+  - **Yönetici AI Asistanı** (Admin Helper AI) → Hata ayıklama, kod düzenleme ve genel yardım için panel içinde çalışan yapay zeka destekli asistan.  
 - **PWA Uyumluluğu** → `manifest.json` + `service-worker.js` ile offline çalışma.  
 - **Çoklu Dil Desteği** → JSON tabanlı `lang.js` (TR/EN hazır, kolay genişletilebilir).  
 - **Profil Yönetimi** → Avatar seçme, görünen isim değiştirme.  
@@ -130,14 +161,17 @@ Bu proje bir hobi çalışmasıdır. Birçok güvenlik önlemi (XSS koruması, S
   - Yeni temaları reposundan indirip ZIP olarak admin panelden yükleyebilirsiniz.
 
 - **tools/** → Araçlar buradan indirip sisteminizde çalıştırabilirsiniz.  
-  - `onar.php` → **Onarım Aracı** (⚠️ Veritabanını sıfırlar ve test verilerini siler. Yalnızca yayına çıkmadan önce veya temizlik için kullanın. Production ortamında tutmayın.)
+   onar.php → Onarım Aracı: Klasör yapısını kontrol eder, eksik tabloları oluşturur ve sistemi stabilize eder. (⚠️ Yayına alırken silmeyi unutmayın). 
 
 
 ---
 
 ## 🛠️ Kullanılan Teknolojiler
-- **Backend:** PHP 8+, SQLite  
-- **Frontend:** Modüler JS (`menu.js`, `modules.js`, `pages.js` vb.)  
-- **UI/UX:** CSS (Minimalist ve işlevsel tasarım)  
+
+    Backend: PHP 8+, SQLite
+
+    Frontend: Bootstrap, FontAwesome, ve AI arayüzü için minimalist yardımcılar (Marked, HighlightJS).
+
+    AI: OpenRouter veya OpenAI uyumlu herhangi bir API (isteğe bağlı).
 
 ---

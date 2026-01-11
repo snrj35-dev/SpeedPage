@@ -42,21 +42,64 @@ function clean_table($t)
     return preg_replace("/[^a-zA-Z0-9_]/", "", $t);
 }
 
+function get_primary_key($db, $table)
+{
+    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'sqlite') {
+        $cols = $db->query("PRAGMA table_info(`$table`)")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($cols as $c) {
+            if ($c['pk'])
+                return $c['name'];
+        }
+    } else {
+        $cols = $db->query("DESCRIBE `$table`")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($cols as $c) {
+            if ($c['Key'] === 'PRI')
+                return $c['Field'];
+        }
+    }
+    return 'id'; // Fallback
+}
+
 /* ---------------- TABLE LIST ---------------- */
 if ($action === "tables") {
-    echo json_encode(
-        $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-            ->fetchAll(PDO::FETCH_COLUMN)
-    );
+    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'sqlite') {
+        echo json_encode(
+            $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+                ->fetchAll(PDO::FETCH_COLUMN)
+        );
+    } else {
+        echo json_encode(
+            $db->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN)
+        );
+    }
     exit;
 }
 
 /* ---------------- COLUMN LIST ---------------- */
 if ($action === "columns") {
     $t = clean_table($_GET["table"] ?? "");
-    echo json_encode(
-        $db->query("PRAGMA table_info(`$t`)")->fetchAll(PDO::FETCH_ASSOC)
-    );
+    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'sqlite') {
+        echo json_encode(
+            $db->query("PRAGMA table_info(`$t`)")->fetchAll(PDO::FETCH_ASSOC)
+        );
+    } else {
+        // Map MySQL DESCRIBE to SQLite PRAGMA table_info format for frontend compatibility
+        $cols = $db->query("DESCRIBE `$t`")->fetchAll(PDO::FETCH_ASSOC);
+        $mapped = array_map(function ($c) {
+            return [
+                'name' => $c['Field'],
+                'type' => $c['Type'],
+                'notnull' => ($c['Null'] === 'NO' ? 1 : 0),
+                'dflt_value' => $c['Default'],
+                'pk' => ($c['Key'] === 'PRI' ? 1 : 0),
+                'extra' => $c['Extra'] // e.g. auto_increment
+            ];
+        }, $cols);
+        echo json_encode($mapped);
+    }
     exit;
 }
 
@@ -79,6 +122,28 @@ if ($action === "insert") {
     }
 
     $data = $_POST["data"];
+
+    // Detect PK and Auto-Increment
+    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'sqlite') {
+        $cols = $db->query("PRAGMA table_info(`$t`)")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($cols as $c) {
+            // Integer PK in SQLite is typically auto-increment if not provided
+            if ($c['pk'] && stripos($c['type'], 'INT') !== false) {
+                if (empty($data[$c['name']]))
+                    unset($data[$c['name']]);
+            }
+        }
+    } else {
+        $cols = $db->query("DESCRIBE `$t`")->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($cols as $c) {
+            if (stripos($c['Extra'], 'auto_increment') !== false) {
+                unset($data[$c['Field']]);
+            }
+        }
+    }
+
+    // Falls back to legacy 'id' unset just in case
     unset($data["id"]);
 
     // Auto hash password
@@ -101,7 +166,7 @@ if ($action === "insert") {
 /* ---------------- UPDATE ---------------- */
 if ($action === "update") {
     $t = clean_table($_POST["table"] ?? "");
-    $id = (int) ($_POST["id"] ?? 0);
+    $id = $_POST["id"] ?? ""; // Could be string key
     $col = clean_table($_POST["col"] ?? "");
     $val = $_POST["val"] ?? "";
 
@@ -109,7 +174,9 @@ if ($action === "update") {
         $val = password_hash($val, PASSWORD_BCRYPT);
     }
 
-    $db->prepare("UPDATE `$t` SET `$col`=? WHERE id=?")
+    $pk = get_primary_key($db, $t);
+
+    $db->prepare("UPDATE `$t` SET `$col`=? WHERE `$pk`=?")
         ->execute([$val, $id]);
 
     echo json_encode(["ok" => true]);
@@ -119,15 +186,18 @@ if ($action === "update") {
 /* ---------------- DELETE ---------------- */
 if ($action === "delete") {
     $t = clean_table($_POST["table"] ?? "");
-    $id = (int) ($_POST["id"] ?? 0);
+    $id = $_POST["id"] ?? "";
+
+    $pk = get_primary_key($db, $t);
 
     // Prevent deleting main admin
-    if ($t === "users" && $id == 1) {
+    if ($t === "users" && ($pk === "id" && $id == 1)) {
         echo json_encode(["ok" => false, "error" => "MAIN_ADMIN_CANNOT_BE_DELETED"]);
         exit;
     }
 
-    $db->exec("DELETE FROM `$t` WHERE id=$id");
+    $db->prepare("DELETE FROM `$t` WHERE `$pk`=?")->execute([$id]);
+
     echo json_encode(["ok" => true]);
     exit;
 }
@@ -162,24 +232,43 @@ if ($action === "sql") {
 /* ---------------- EXPORT SQL ---------------- */
 if ($action === "export_sql") {
     $dump = "";
-    $tables = $db->query("SELECT name FROM sqlite_master WHERE type='table'")
-        ->fetchAll(PDO::FETCH_COLUMN);
+    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
 
-    foreach ($tables as $t) {
-        $row = $db->query("SELECT sql FROM sqlite_master WHERE name='$t'")
-            ->fetch(PDO::FETCH_ASSOC);
+    if ($driver === 'sqlite') {
+        $tables = $db->query("SELECT name FROM sqlite_master WHERE type='table'")
+            ->fetchAll(PDO::FETCH_COLUMN);
 
-        if (!empty($row["sql"])) {
-            $dump .= $row["sql"] . ";\n\n";
+        foreach ($tables as $t) {
+            $row = $db->query("SELECT sql FROM sqlite_master WHERE name='$t'")
+                ->fetch(PDO::FETCH_ASSOC);
+
+            if (!empty($row["sql"])) {
+                $dump .= $row["sql"] . ";\n\n";
+            }
+
+            $rows = $db->query("SELECT * FROM `$t`")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $dump .= "INSERT INTO `$t` VALUES (";
+                $dump .= implode(",", array_map(fn($v) => $v === null ? "NULL" : "'" . str_replace("'", "''", $v) . "'", array_values($r)));
+                $dump .= ");\n";
+            }
+            $dump .= "\n";
         }
+    } else {
+        // Basic MySQL Export
+        $tables = $db->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($tables as $t) {
+            $create = $db->query("SHOW CREATE TABLE `$t`")->fetch(PDO::FETCH_ASSOC);
+            $dump .= $create['Create Table'] . ";\n\n";
 
-        $rows = $db->query("SELECT * FROM `$t`")->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($rows as $r) {
-            $dump .= "INSERT INTO `$t` VALUES (";
-            $dump .= implode(",", array_map(fn($v) => "'" . str_replace("'", "''", $v) . "'", array_values($r)));
-            $dump .= ");\n";
+            $rows = $db->query("SELECT * FROM `$t`")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $dump .= "INSERT INTO `$t` VALUES (";
+                $dump .= implode(",", array_map(fn($v) => $v === null ? "NULL" : "'" . str_replace("'", "\'", $v) . "'", array_values($r)));
+                $dump .= ");\n";
+            }
+            $dump .= "\n";
         }
-        $dump .= "\n";
     }
 
     echo json_encode(["sql" => $dump]);
@@ -189,24 +278,43 @@ if ($action === "export_sql") {
 /* ---------------- EXPORT SQL AS FILE ---------------- */
 if ($action === "export_sql_file") {
     $dump = "";
-    $tables = $db->query("SELECT name FROM sqlite_master WHERE type='table'")
-        ->fetchAll(PDO::FETCH_COLUMN);
+    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
 
-    foreach ($tables as $t) {
-        $row = $db->query("SELECT sql FROM sqlite_master WHERE name='$t'")
-            ->fetch(PDO::FETCH_ASSOC);
+    if ($driver === 'sqlite') {
+        $tables = $db->query("SELECT name FROM sqlite_master WHERE type='table'")
+            ->fetchAll(PDO::FETCH_COLUMN);
 
-        if (!empty($row["sql"])) {
-            $dump .= $row["sql"] . ";\n\n";
+        foreach ($tables as $t) {
+            $row = $db->query("SELECT sql FROM sqlite_master WHERE name='$t'")
+                ->fetch(PDO::FETCH_ASSOC);
+
+            if (!empty($row["sql"])) {
+                $dump .= $row["sql"] . ";\n\n";
+            }
+
+            $rows = $db->query("SELECT * FROM `$t`")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $dump .= "INSERT INTO `$t` VALUES (";
+                $dump .= implode(",", array_map(fn($v) => $v === null ? "NULL" : "'" . str_replace("'", "''", $v) . "'", array_values($r)));
+                $dump .= ");\n";
+            }
+            $dump .= "\n";
         }
+    } else {
+        // MySQL Export as File
+        $tables = $db->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($tables as $t) {
+            $create = $db->query("SHOW CREATE TABLE `$t`")->fetch(PDO::FETCH_ASSOC);
+            $dump .= $create['Create Table'] . ";\n\n";
 
-        $rows = $db->query("SELECT * FROM `$t`")->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($rows as $r) {
-            $dump .= "INSERT INTO `$t` VALUES (";
-            $dump .= implode(",", array_map(fn($v) => "'" . str_replace("'", "''", $v) . "'", array_values($r)));
-            $dump .= ");\n";
+            $rows = $db->query("SELECT * FROM `$t`")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $dump .= "INSERT INTO `$t` VALUES (";
+                $dump .= implode(",", array_map(fn($v) => $v === null ? "NULL" : "'" . str_replace("'", "\'", $v) . "'", array_values($r)));
+                $dump .= ");\n";
+            }
+            $dump .= "\n";
         }
-        $dump .= "\n";
     }
 
     $filename = 'backup_' . date('Ymd_His') . '.sql';

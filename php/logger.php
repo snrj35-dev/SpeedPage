@@ -7,6 +7,11 @@ if (!function_exists('sp_log')) {
     function ensure_log_table()
     {
         global $db;
+        static $checked = false;
+
+        if ($checked)
+            return;
+
         if (!$db) {
             $db_file = __DIR__ . '/../admin/veritabanı/data.db';
             if (file_exists($db_file)) {
@@ -20,19 +25,52 @@ if (!function_exists('sp_log')) {
                 return;
             }
         }
-        $db->exec("
-            CREATE TABLE IF NOT EXISTS logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NULL,
-                action_type TEXT NOT NULL, 
-                message TEXT,
-                ip_address TEXT,
-                user_agent TEXT,
-                old_data TEXT NULL,
-                new_data TEXT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ");
+
+        try {
+            $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+
+            // TRANSACTION SAFETY (MySQL): 
+            // DDL (CREATE TABLE) inside a transaction causes an implicit commit in MySQL.
+            // If we are in a transaction and haven't checked the table yet, we MUST skip DDL.
+            if ($driver === 'mysql' && $db->inTransaction()) {
+                // We don't mark $checked as true here because we might want to check again 
+                // outside of the transaction scope later in the same request.
+                return;
+            }
+
+            if ($driver === 'sqlite') {
+                $db->exec("
+                    CREATE TABLE IF NOT EXISTS logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NULL,
+                        action_type TEXT NOT NULL, 
+                        message TEXT,
+                        ip_address TEXT,
+                        user_agent TEXT,
+                        old_data TEXT NULL,
+                        new_data TEXT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ");
+            } elseif ($driver === 'mysql') {
+                $db->exec("
+                    CREATE TABLE IF NOT EXISTS logs (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NULL,
+                        action_type LONGTEXT NOT NULL, 
+                        message LONGTEXT,
+                        ip_address LONGTEXT,
+                        user_agent LONGTEXT,
+                        old_data LONGTEXT NULL,
+                        new_data LONGTEXT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+                ");
+            }
+            $checked = true;
+        } catch (Exception $e) {
+            error_log("Log Table Creation Error: " . $e->getMessage());
+        }
     }
 
     /*
@@ -47,6 +85,10 @@ if (!function_exists('sp_log')) {
 
         // Tabloyu check et (performans için session cache kullanılabilir ama şimdilik her çağrıda 'IF NOT EXISTS' ucuzdur)
         ensure_log_table();
+
+        // Eğer veritabanı hala bağlı değilse loglama yapma
+        if (!$db)
+            return;
 
         $user_id = $_SESSION['user_id'] ?? null;
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
@@ -70,9 +112,16 @@ if (!function_exists('sp_log')) {
     {
         global $db;
         ensure_log_table();
+        if (!$db)
+            return;
+
         try {
-            // SQLite: datetime('now', '-30 days')
-            $stmt = $db->prepare("DELETE FROM logs WHERE created_at < datetime('now', '-' || ? || ' days')");
+            $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+            if ($driver === 'sqlite') {
+                $stmt = $db->prepare("DELETE FROM logs WHERE created_at < datetime('now', '-' || ? || ' days')");
+            } else {
+                $stmt = $db->prepare("DELETE FROM logs WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)");
+            }
             $stmt->execute([(int) $days]);
         } catch (Exception $e) {
             error_log("Log Cleanup Error: " . $e->getMessage());

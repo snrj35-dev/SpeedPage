@@ -61,6 +61,17 @@ $pageAssets = [
     'dbpanel' => ['css' => [], 'js' => [CDN_URL . "js/dbpanel.js"]],
     'browser' => ['css' => [], 'js' => [CDN_URL . "js/browser.js"]],
     'system' => ['css' => [CDN_URL . "css/system.css"], 'js' => [CDN_URL . "js/system.js", CDN_URL . "js/chart.js"]],
+    'aipanel' => [
+        'css' => [
+            CDN_URL . "css/ai.css",
+            CDN_URL . "css/highlight-dark.min.css" // Local Highlight.js Theme
+        ],
+        'js' => [
+            CDN_URL . "js/highlight.min.js", // Local Highlight.js
+            CDN_URL . "js/marked.min.js",    // Local Marked.js
+            CDN_URL . "js/ai.js"
+        ]
+    ],
 ];
 
 
@@ -147,6 +158,9 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
                 <a href="index.php?page=users" class="nav-link <?= $page === 'users' ? 'active' : '' ?>">
                     <i class="fas fa-users"></i> <span lang="users"></span>
                 </a>
+                <a href="index.php?page=aipanel" class="nav-link <?= $page === 'aipanel' ? 'active' : '' ?>">
+                    <i class="fas fa-robot"></i> <span lang="ai_panel">AI Panel</span>
+                </a>
                 <a href="index.php?page=dbpanel" class="nav-link <?= $page === 'dbpanel' ? 'active' : '' ?>">
                     <i class="fas fa-database"></i> <span lang="database"></span>
                 </a>
@@ -200,6 +214,14 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
             case 'system':
                 if (!empty($is_admin) && $is_admin)
                     require __DIR__ . "/system-panel.php";
+                break;
+            case 'migration':
+                if (!empty($is_admin) && $is_admin)
+                    require __DIR__ . "/migration-wizard.php";
+                break;
+            case 'aipanel':
+                if (!empty($is_admin) && $is_admin)
+                    require __DIR__ . "/ai-panel.php";
                 break;
             default:
                 echo "<p>Sayfa bulunamadı.</p>";

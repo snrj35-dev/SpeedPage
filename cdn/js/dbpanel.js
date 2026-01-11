@@ -28,56 +28,84 @@ function loadTable(t) {
     tableName = t;
     $("#title").text(t);
 
-    $.getJSON("verislem.php?action=columns&table=" + t, c => columns = c);
+    // Sütunları ve satırları koordineli yükle
+    $.getJSON("verislem.php?action=columns&table=" + t, c => {
+        columns = c;
+        const pkCol = columns.find(x => x.pk == 1)?.name || 'id';
 
-    $.getJSON("verislem.php?action=rows&table=" + t, rows => {
-        if (!rows.length) { $("#content").html(window.lang?.no_data || 'No data'); return; }
+        $.getJSON("verislem.php?action=rows&table=" + t, rows => {
+            if (!rows || !rows.length) {
+                $("#content").html(window.lang?.no_data || 'Veri bulunamadı.');
+                return;
+            }
 
-        let th = Object.keys(rows[0]).map(k => `<th>${k}</th>`).join("");
+            // Header - rows[0] üzerinden değil, columns metadata üzerinden gitmek daha güvenli
+            let th = columns.map(col => `<th>${col.name}</th>`).join("");
 
-        let tr = rows.map(r => {
-            let td = Object.entries(r).map(([k, v]) => {
-                if (k === "id") return `<td>${v}</td>`;
-                return `<td contenteditable onblur="update(${r.id},'${k}',this.innerText)">${v}</td>`;
-            }).join("");
+            let tr = rows.map(r => {
+                const rowIdValue = r[pkCol];
+                // ID değerini tırnak içine al (string ise sorun çıkmasın)
+                const quotedId = typeof rowIdValue === 'string' ? `'${rowIdValue}'` : rowIdValue;
 
-            return `<tr>${td}<td>
-                <button class="btn btn-danger btn-sm" onclick="del(${r.id})">
+                let td = columns.map(col => {
+                    const k = col.name;
+                    const v = r[k] !== null ? r[k] : '';
+                    if (k === pkCol) return `<td>${v}</td>`;
+                    return `<td contenteditable onblur="update(${quotedId},'${k}',this.innerText)">${v}</td>`;
+                }).join("");
+
+                return `<tr>${td}<td>
+                <button class="btn btn-danger btn-sm" onclick="del(${quotedId})">
                 <i class="fa fa-trash"></i></button>
             </td></tr>`;
-        }).join("");
+            }).join("");
 
-        $("#content").html(`
+            $("#content").html(`
             <table class="table table-bordered table-sm">
-                <thead><tr>${th}<th>${window.lang?.tabislem || 'Actions'}</th></tr></thead>
+                <thead><tr>${th}<th>${window.lang?.tabislem || 'İşlemler'}</th></tr></thead>
                 <tbody>${tr}</tbody>
             </table>
         `);
+        });
     });
 }
 
 // Yeni kayıt formu
 function addForm() {
     if (!tableName) {
-        alert(window.lang?.select_table_first || 'Please select a table first');
+        alert(window.lang?.select_table_first || 'Lütfen önce bir tablo seçin');
         return;
     }
 
     if (!columns.length) {
-        alert(window.lang?.columns_missing || 'Could not fetch table columns');
+        alert(window.lang?.columns_missing || 'Tablo sütun bilgileri alınamadı');
         return;
     }
 
     let f = columns
-        .filter(c => c.pk == 0)
-        .map(c => `<input class="form-control mb-1" name="${c.name}" placeholder="${c.name}">`)
+        .filter(c => {
+            // Auto-increment olanları gizle
+            if (c.extra && c.extra.toLowerCase().includes('auto_increment')) return false;
+            // SQLite için Integer PK ise ve boş bırakılacaksa gizlenebilir (opsiyonel)
+            // Ama genel kural: Manuel girilmesi gereken PK'ları göster.
+            if (c.pk == 1 && c.type && c.type.toLowerCase().includes('int')) return false;
+            return true;
+        })
+        .map(c => `<input class="form-control mb-1" name="${c.name}" placeholder="${c.name} (${c.type})">`)
         .join("");
 
     $("#content").prepend(`
-        <div class="card p-2 mb-2">
-            <b>${window.lang?.add_record || 'New Record'}</b>
+        <div class="card p-3 mb-3 shadow-sm">
+            <h6 class="card-title"><i class="fa fa-plus-circle text-success"></i> ${window.lang?.add_record || 'Yeni Kayıt Ekle'}</h6>
             ${f}
-            <button class="btn btn-success btn-sm mt-2" onclick="insert(this)">${window.lang?.save_changes || 'Save'}</button>
+            <div class="mt-2">
+                <button class="btn btn-success btn-sm" onclick="insert(this)">
+                    <i class="fa fa-save"></i> ${window.lang?.save_changes || 'Kaydet'}
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="loadTable(tableName)">
+                    <i class="fa fa-times"></i> ${window.lang?.cancel || 'İptal'}
+                </button>
+            </div>
         </div>
     `);
 }

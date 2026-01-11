@@ -1,0 +1,150 @@
+/* AI Panel Özel Stilleri */
+
+/* Chat Area */
+#ai-chat-area {
+    background-color: #f8f9fa;
+    scroll-behavior: smooth;
+}
+
+/* User Message */
+.chat-message.user {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 20px;
+}
+
+.chat-message.user .message-content {
+    background: linear-gradient(135deg, #0d6efd, #0a58ca);
+    color: white;
+    padding: 12px 18px;
+    border-radius: 18px 18px 2px 18px;
+    max-width: 80%;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    font-size: 0.95rem;
+}
+
+/* AI Message */
+.chat-message.ai {
+    display: flex;
+    justify-content: flex-start;
+    margin-bottom: 20px;
+}
+
+.chat-message.ai .avatar {
+    width: 36px;
+    height: 36px;
+    background: #e9ecef;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 12px;
+    color: #495057;
+    flex-shrink: 0;
+}
+
+.chat-message.ai .message-content {
+    background: white;
+    border: 1px solid #e9ecef;
+    color: #212529;
+    padding: 16px;
+    border-radius: 18px 18px 18px 2px;
+    max-width: 85%;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+/* Markdown Styles in Chat */
+.chat-message.ai .message-content pre {
+    background: #2d2d2d;
+    padding: 15px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 10px 0;
+    color: #f8f8f2;
+    position: relative;
+}
+
+.chat-message.ai .message-content code {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.9em;
+}
+
+.chat-message.ai .message-content p:last-child {
+    margin-bottom: 0;
+}
+
+/* File Badges in Input Area */
+.file-badge {
+    display: inline-flex;
+    align-items: center;
+    background: #e7f1ff;
+    color: #0d6efd;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    margin-right: 6px;
+    border: 1px solid #cce5ff;
+}
+
+.file-badge .btn-close {
+    font-size: 0.6rem;
+    margin-left: 6px;
+}
+
+/* Mini File Browser */
+.mini-file-item {
+    padding: 6px 10px;
+    cursor: pointer;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    transition: background 0.2s;
+}
+
+.mini-file-item:hover {
+    background-color: #f1f3f5;
+}
+
+.mini-file-item.active {
+    background-color: #e7f1ff;
+    color: #0d6efd;
+}
+
+.mini-file-icon {
+    width: 20px;
+    text-align: center;
+    margin-right: 8px;
+    color: #adb5bd;
+}
+
+/* Code Block Actions */
+.code-actions-header {
+    display: flex;
+    justify-content: flex-end;
+    background: #444;
+    padding: 4px 8px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    margin-bottom: -10px; /* Pull content up */
+    z-index: 10;
+    position: relative;
+}
+
+.code-btn {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    margin-left: 6px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.1);
+    color: #ccc;
+    border: none;
+    transition: all 0.2s;
+}
+
+.code-btn:hover {
+    background: rgba(255,255,255,0.3);
+    color: white;
+}

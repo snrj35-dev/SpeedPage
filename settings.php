@@ -39,7 +39,6 @@ define('CDN_URL', BASE_URL . 'cdn/');
 // ---------------------------------------------
 // 2. Dosya Sistemi Yolları (PHP için)
 // ---------------------------------------------
-
 // settings.php'nin bulunduğu dizin
 define('ROOT_DIR', __DIR__ . '/');
 

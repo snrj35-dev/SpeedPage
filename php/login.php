@@ -61,8 +61,19 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     exit;
                 } else {
                     $time = time();
-                    $db->prepare("INSERT INTO login_attempts (ip_address, attempts, last_attempt) VALUES (?, 1, ?) 
-                                  ON CONFLICT(ip_address) DO UPDATE SET attempts = attempts + 1, last_attempt = ?")->execute([$ip, $time, $time]);
+                    // Database compatible update/insert flow
+                    $stmt = $db->prepare("SELECT COUNT(*) FROM login_attempts WHERE ip_address = ?");
+                    $stmt->execute([$ip]);
+                    $exists = $stmt->fetchColumn() > 0;
+
+                    if ($exists) {
+                        $db->prepare("UPDATE login_attempts SET attempts = attempts + 1, last_attempt = ? WHERE ip_address = ?")
+                            ->execute([$time, $ip]);
+                    } else {
+                        $db->prepare("INSERT INTO login_attempts (ip_address, attempts, last_attempt) VALUES (?, 1, ?)")
+                            ->execute([$ip, $time]);
+                    }
+
                     $error_message = '<div class="text-danger" lang="errlogin"></div>';
                     sp_log("Hatalı giriş denemesi: $username", "login_fail");
                 }

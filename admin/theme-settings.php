@@ -39,10 +39,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_theme_settings']
             $val = isset($_POST[$key]) ? '1' : '0';
         }
 
-        $stmt = $db->prepare("INSERT INTO theme_settings (theme_name, setting_key, setting_value) 
-                              VALUES (?, ?, ?) 
-                              ON CONFLICT(theme_name, setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value");
-        $stmt->execute([$themeName, $key, $val]);
+        $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+        if ($driver === 'sqlite') {
+            $stmt = $db->prepare("INSERT INTO theme_settings (theme_name, setting_key, setting_value) 
+                                  VALUES (?, ?, ?) 
+                                  ON CONFLICT(theme_name, setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value");
+            $stmt->execute([$themeName, $key, $val]);
+        } else {
+            // MySQL: ON DUPLICATE KEY UPDATE
+            $stmt = $db->prepare("INSERT INTO theme_settings (theme_name, setting_key, setting_value) 
+                                  VALUES (?, ?, ?) 
+                                  ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+            $stmt->execute([$themeName, $key, $val]);
+        }
     }
     echo "<div class='alert alert-success'>" . __('settings_saved') . "</div>";
 }

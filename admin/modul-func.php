@@ -13,40 +13,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 /* ---------------- Ensure tables exist ---------------- */
-$db->exec("
-CREATE TABLE IF NOT EXISTS modules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE,
-    title TEXT NOT NULL,
-    version TEXT DEFAULT '1.0',
-    description TEXT,
-    page_slug TEXT,
-    is_active INTEGER DEFAULT 1,
-    installed_at DATETIME DEFAULT CURRENT_TIMESTAMP
-)
-");
+$driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+if ($driver === 'sqlite') {
+    $db->exec("
+    CREATE TABLE IF NOT EXISTS modules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        version TEXT DEFAULT '1.0',
+        description TEXT,
+        page_slug TEXT,
+        is_active INTEGER DEFAULT 1,
+        installed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    ");
 
-$db->exec("
-CREATE TABLE IF NOT EXISTS module_assets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    module_id INTEGER NOT NULL,
-    type TEXT NOT NULL,   -- js | css | json
-    path TEXT NOT NULL,
-    load_order INTEGER DEFAULT 0,
-    FOREIGN KEY (module_id) REFERENCES modules(id)
-)
-");
+    $db->exec("
+    CREATE TABLE IF NOT EXISTS module_assets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        module_id INTEGER NOT NULL,
+        type TEXT NOT NULL,   -- js | css | json
+        path TEXT NOT NULL,
+        load_order INTEGER DEFAULT 0,
+        FOREIGN KEY (module_id) REFERENCES modules(id)
+    )
+    ");
 
-// Theme Settings Table
-$db->exec("
-CREATE TABLE IF NOT EXISTS theme_settings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    theme_name TEXT NOT NULL,
-    setting_key TEXT NOT NULL,
-    setting_value TEXT,
-    UNIQUE(theme_name, setting_key)
-)
-");
+    $db->exec("
+    CREATE TABLE IF NOT EXISTS theme_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        theme_name TEXT NOT NULL,
+        setting_key TEXT NOT NULL,
+        setting_value TEXT,
+        UNIQUE(theme_name, setting_key)
+    )
+    ");
+} else {
+    // MySQL
+    $db->exec("
+    CREATE TABLE IF NOT EXISTS modules (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        title LONGTEXT NOT NULL,
+        version VARCHAR(50) DEFAULT '1.0',
+        description LONGTEXT,
+        page_slug LONGTEXT,
+        is_active INT DEFAULT 1,
+        installed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    $db->exec("
+    CREATE TABLE IF NOT EXISTS module_assets (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        module_id INT NOT NULL,
+        type VARCHAR(10) NOT NULL,
+        path LONGTEXT NOT NULL,
+        load_order INT DEFAULT 0,
+        FOREIGN KEY (module_id) REFERENCES modules(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+
+    $db->exec("
+    CREATE TABLE IF NOT EXISTS theme_settings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        theme_name VARCHAR(255) NOT NULL,
+        setting_key VARCHAR(255) NOT NULL,
+        setting_value LONGTEXT,
+        UNIQUE(theme_name, setting_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ");
+}
 
 if ($action === 'upload') {
     $extractPath = null;

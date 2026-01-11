@@ -46,6 +46,10 @@ require_once __DIR__ . '/db.php';
                 <i class="fa fa-file-download"></i> <span lang="download_backup"></span>
             </button>
 
+            <a href="index.php?page=migration" class="btn btn-info btn-sm mb-2 text-white">
+                <i class="fa fa-magic"></i> Migration Wizard
+            </a>
+
             <form id="uploadSqlForm" enctype="multipart/form-data" onsubmit="return uploadSqlFile(this)">
                 <input type="hidden" name="csrf" value="<?= $_SESSION['csrf'] ?>">
                 <div class="input-group mb-2">
