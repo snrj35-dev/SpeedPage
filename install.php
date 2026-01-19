@@ -325,8 +325,18 @@ CREATE TABLE IF NOT EXISTS ai_providers (
             'max_login_attempts' => '5',
             'login_block_duration' => '15',
             'default_lang' => $langCode,
+            'email_verification' => '0',
+            'allow_username_change' => '0',
+            'allow_password_change' => '0',
+            'site_slogan' => 'hızlı hafif modern',
+            'meta_description' => '',
+            'logo_url' => '',
+            'login_captcha' => '0',
+            'allow_user_theme' => '0',
+            'friendly_url' => '0',
+            'site_protocol' => 'http',
+            'meta_keywords' => '',
         ];
-
         foreach ($defaultSettings as $key => $val) {
             // Upsert Logic manually for broader support
             $check = $pdo->prepare("SELECT 1 FROM settings WHERE " . ($dbDriver === 'mysql' ? "`key`" : "key") . " = ?");
