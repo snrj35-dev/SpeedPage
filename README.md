@@ -1,77 +1,140 @@
-📘 SpeedPage
+# 📘 SpeedPage
 
-SpeedPage — A modular, panel-oriented Content Management System (CMS) designed for high performance and flexibility. Now featuring a Universal Installation Wizard with support for both SQLite and MySQL.
+**SpeedPage** is a modular, panel-oriented Content Management System (CMS) designed for **high performance**, **flexibility**, and **developer-friendly workflows**. It now features a **Universal Installation Wizard** with support for both **SQLite** and **MySQL**.
 
-Goal: To provide developers with a clean working environment through fast setup, offline support, multi-language support, and flexible module management.
-⚙️ Installation (New & Simplified)
+> 🎯 **Goal:** To provide developers with a clean working environment through **fast setup**, **offline support**, **multi-language support**, and **flexible module management**.
 
-    Upload the files to your localhost or your server.
+---
 
-    Open your site in the browser (e.g., localhost/speedpage).
+## ⚠️ Disclaimer
 
-    You will be automatically redirected to the Installation Wizard (install.php).
+This project is a **hobby & experimental** work.
+Although various security measures (XSS filtering, SQL injection prevention, brute-force protection, etc.) are implemented, you **must perform your own security testing** before using SpeedPage in a production environment.
 
-    Follow the steps:
+---
 
-        Database Choice: Select SQLite (for zero-config/local) or MySQL (for production).
+## 🚀 Key Features
 
-        Connection Test: Integrated tool to verify your MySQL credentials before installing.
+### 🛠️ Universal Installer
 
-        Admin Setup: Define your admin username and password during installation.
+* SQLite or MySQL selection
+* Live MySQL connection tester
+* Admin account creation
+* Auto config generation (`settings.php`)
+* Smart schema deployment (all tables auto-created)
+* Auto-detection of `BASE_URL` and `BASE_PATH`
+* Installation lock system (prevents re-installation)
 
-        Auto-Config: The system automatically writes your settings.php and creates the admin/veritabanı/data.db (if SQLite is chosen).
+### 🧩 Modular Architecture
 
-    Security: Delete install.php after the "Success" message.
+* Upload modules as ZIP
+* Enable / disable modules
+* Hook system for extensions
+* Unified management of pages, menus, and assets
 
-🚀 Key Updates (v0.2 Alpha - Installer Edition)
-🛠️ Universal Installer
+### 🎨 Theme System
 
-    Agnostic DB Support: Switch between SQLite and MySQL with a single click.
+* Upload themes as ZIP
+* Activate / deactivate themes
+* Theme settings stored in database
+* Sidebar, color scheme, footer and layout options
 
-    Smart Schema Deployment: Automatically creates all tables (Pages, Users, Settings, Themes, AI Providers, etc.) with pre-configured default values.
+### 🤖 Admin AI Assistant
 
-    Theme Settings Integration: Now pre-installs default theme configurations (colors, sidebar positions, footer links) into the database.
+* Integrated into admin panel
+* Debugging assistant
+* Code analysis
+* Small patch generation
+* Supports OpenRouter / OpenAI-compatible APIs
 
-    Dynamic settings.php: Automatically detects your BASE_URL and BASE_PATH and updates your configuration file.
+### 🛡️ Smart Maintenance
 
-🤖 Admin AI Assistant
+* SQLite WAL mode support
+* Auto installer lock
+* Self-healing schema logic
+* Error capturing hooks
 
-    Integrated into the panel, capable of analyzing code errors and applying small patches directly to files using OpenRouter/OpenAI API.
+### 🌍 PWA Ready
 
-🛡️ Smart Maintenance & Security
+* Offline support
+* `manifest.json`
+* `service-worker.js`
 
-    WAL Mode Support: Optimized SQLite performance to prevent database locks.
+### 👥 User System
 
-    Auto-Installer Lock: Prevents re-installation if the system is already configured.
+* Roles: Admin, Editor, User
+* Profile management
+* Avatar selection
+* Permission-based access
 
-📦 Core Features
+### 🔄 Database Migration
 
-    Dual Database Engine → Use SQLite for lightweight portability or MySQL for heavy traffic.
+* Built-in wizard
+* Migrate from SQLite → MySQL
+* No data loss
 
-    Theme Management → Activate/deactivate themes and manage Theme Settings directly from the DB.
+---
 
-    PWA Ready → Native support for manifest.json and service-worker.js.
+## ⚙️ Installation
 
-    Modular Architecture → Upload ZIP modules/themes through the admin panel.
+1. Upload the files to your localhost or server.
+2. Open your site in the browser:
 
-    User Roles → Granular control with Admin, Editor, and User roles.
+   ```
+   http://localhost/speedpage
+   ```
+3. You will be redirected to the installer: `install.php`
+4. Follow the steps:
 
-    Database Migration → Built-in wizard to move your data from SQLite to MySQL seamlessly.
+   * Choose database (SQLite or MySQL)
+   * Test MySQL connection (if selected)
+   * Create admin account
+   * Let the system auto-configure everything
+5. When you see the **Success** message:
 
-📚 Libraries Used
+> ❗ **Delete `install.php` immediately**
 
-    Bootstrap 5
+---
 
-    Font Awesome 6
+## 📦 Modules & Themes Repository
 
-    Chart.js
+Ready-made modules and themes:
+🔗 [https://github.com/snrj35-dev/SpeedPage-modul-theme](https://github.com/snrj35-dev/SpeedPage-modul-theme)
 
-    Marked.js & Highlight.js (for AI Chat UX)
+### Structure
 
-🛠️ Technologies
+* `module/` → Feature modules
+* `theme/` → UI themes
+* `tools/` → System tools
 
-    Backend: PHP 8.3+ (Optimized for modern performance)
+  * `onar.php` → Repair tool (creates missing tables, fixes structure)
 
-    Database: SQLite (File-based) or MySQL (Server-based)
+> ⚠️ Remove all tools before going live
 
-    AI Integration: OpenAI-compatible API support via Admin Panel.
+---
+
+## 📚 Libraries Used
+
+* Bootstrap 5
+* Font Awesome 6
+* Chart.js
+* Marked.js
+* Highlight.js
+
+---
+
+## 🛠️ Technologies
+
+**Backend:** PHP 8.3+
+
+**Database:** SQLite or MySQL
+
+**Frontend:** Bootstrap, FontAwesome
+
+**AI Integration:** OpenAI-compatible APIs
+
+---
+
+## 🧪 Development Status
+
+Current version: **v0.2 Alpha**
