@@ -1,16 +1,19 @@
 <?php
+declare(strict_types=1);
+
 // GLOBAL LOGGER - php/logger.php
 
 if (!function_exists('sp_log')) {
 
     // Veritabanı tablosunun varlığından emin ol (Lazy Init)
-    function ensure_log_table()
+    function ensure_log_table(): void
     {
         global $db;
         static $checked = false;
 
-        if ($checked)
+        if ($checked) {
             return;
+        }
 
         if (!$db) {
             $db_file = __DIR__ . '/../admin/veritabanı/data.db';
@@ -74,27 +77,32 @@ if (!function_exists('sp_log')) {
     }
 
     /*
-     * @param string $message  Kısa açıklama (örn: "Login Failed")
-     * @param string $type     Tür (login_fail, login_success, page_edit, etc.)
-     * @param mixed  $old      Eski veri (Array veya Object ise JSON'a çevrilir)
-     * @param mixed  $new      Yeni veri (Array veya Object ise JSON'a çevrilir)
+     * @param string $message  Short description
+     * @param string $type     Type (login_fail, login_success, page_edit, etc.)
+     * @param mixed  $old      Old data (serialized to JSON)
+     * @param mixed  $new      New data (serialized to JSON)
      */
-    function sp_log($message, $type, $old = null, $new = null)
+    function sp_log(string $message, string $type, mixed $old = null, mixed $new = null): void
     {
         global $db;
 
-        // Tabloyu check et (performans için session cache kullanılabilir ama şimdilik her çağrıda 'IF NOT EXISTS' ucuzdur)
+        // Ensure table exists
         ensure_log_table();
 
-        // Eğer veritabanı hala bağlı değilse loglama yapma
-        if (!$db)
+        // If DB is still not connected, abort
+        if (!$db) {
             return;
+        }
 
         $user_id = $_SESSION['user_id'] ?? null;
+        if ($user_id !== null) {
+            $user_id = (int) $user_id;
+        }
+
         $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
 
-        // Verileri JSON yap
+        // Serialize to JSON
         $old_json = ($old !== null) ? json_encode($old, JSON_UNESCAPED_UNICODE) : null;
         $new_json = ($new !== null) ? json_encode($new, JSON_UNESCAPED_UNICODE) : null;
 
@@ -102,18 +110,19 @@ if (!function_exists('sp_log')) {
             $stmt = $db->prepare("INSERT INTO logs (user_id, action_type, message, ip_address, user_agent, old_data, new_data) VALUES (?, ?, ?, ?, ?, ?, ?)");
             $stmt->execute([$user_id, $type, $message, $ip, $ua, $old_json, $new_json]);
         } catch (Exception $e) {
-            // Loglama hatası sistemin çalışmasını durdurmamalı
+            // Logging failure should not stop execution
             error_log("Logger Error: " . $e->getMessage());
         }
     }
 
-    // Otomatik Temizlik (Varsayılan 30 gün)
-    function sp_log_cleanup($days = 30)
+    // Auto Cleanup (Default 30 days)
+    function sp_log_cleanup(int $days = 30): void
     {
         global $db;
         ensure_log_table();
-        if (!$db)
+        if (!$db) {
             return;
+        }
 
         try {
             $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
@@ -122,19 +131,20 @@ if (!function_exists('sp_log')) {
             } else {
                 $stmt = $db->prepare("DELETE FROM logs WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)");
             }
-            $stmt->execute([(int) $days]);
+            $stmt->execute([$days]);
         } catch (Exception $e) {
             error_log("Log Cleanup Error: " . $e->getMessage());
         }
     }
 
     /**
-     * PHP Hatalarını Yakalar ve Veritabanına Loglar
+     * PHP Error Handler
      */
-    function sp_error_handler($errno, $errstr, $errfile, $errline)
+    function sp_error_handler(int $errno, string $errstr, string $errfile, int $errline): bool
     {
-        if (!(error_reporting() & $errno))
+        if (!(error_reporting() & $errno)) {
             return false;
+        }
 
         $type_map = [
             E_ERROR => 'PHP_ERROR_FATAL',
@@ -151,13 +161,14 @@ if (!function_exists('sp_log')) {
 
         sp_log("[$type] $errstr", 'system_error', null, $data);
 
-        return defined('DEBUG') && DEBUG === true ? false : true;
+        // If DEBUG is false, suppress standard error output by returning true
+        return !(defined('DEBUG') && DEBUG === true);
     }
 
     /**
-     * Yakalanmamış İstisnaları (Exceptions) Yakalar ve Veritabanına Loglar
+     * Uncaught Exception Handler
      */
-    function sp_exception_handler($exception)
+    function sp_exception_handler(Throwable $exception): void
     {
         $data = [
             'file' => $exception->getFile(),
@@ -170,10 +181,28 @@ if (!function_exists('sp_log')) {
         if (defined('DEBUG') && DEBUG === true) {
             echo "<h2>Unhandled Exception</h2><p><b>" . $exception->getMessage() . "</b></p><pre>" . $exception->getTraceAsString() . "</pre>";
         } else {
-            if (!headers_sent())
+            if (!headers_sent()) {
                 http_response_code(500);
+            }
             echo "Sistemde bir hata oluştu. Lütfen daha sonra tekrar deneyin.";
         }
     }
+
+    /**
+     * Renders fatal error reporter button even on white screen death
+     */
+    function sp_fatal_reporter_render(): void
+    {
+        $error = error_get_last();
+        // Only run on critical errors
+        if ($error && in_array($error['type'], [E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE])) {
+            echo "";
+            if (function_exists('run_hook')) {
+                run_hook('footer_end');
+            }
+        }
+    }
+
+    register_shutdown_function('sp_fatal_reporter_render');
 }
 ?>

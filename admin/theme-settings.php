@@ -1,12 +1,26 @@
 <?php
+declare(strict_types=1);
+
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/db.php';
 
+/** @var PDO $db */
+global $db;
+
 // Support both 't' (requested) and 'theme' (already used in themes-panel)
-$themeName = $_GET['t'] ?? $_GET['theme'] ?? '';
+$themeName = filter_input(INPUT_GET, 't', FILTER_SANITIZE_SPECIAL_CHARS) 
+             ?? filter_input(INPUT_GET, 'theme', FILTER_SANITIZE_SPECIAL_CHARS) 
+             ?? '';
+
 if (!$themeName) {
     echo "<div class='alert alert-danger'>" . __('theme_name_missing') . "</div>";
+    return;
+}
+
+// Basic path traversal protection
+if (strpos($themeName, '..') !== false || strpos($themeName, '/') !== false) {
+    echo "<div class='alert alert-danger'>" . __('invalid_request') . "</div>";
     return;
 }
 
@@ -18,42 +32,67 @@ if (!file_exists($jsonPath)) {
     return;
 }
 
-$settingsMeta = json_decode(file_get_contents($jsonPath), true);
-if (!$settingsMeta) {
+$content = file_get_contents($jsonPath);
+if (!$content) {
+     echo "<div class='alert alert-danger'>Read error</div>";
+     return;
+}
+
+$settingsMeta = json_decode($content, true);
+if (!is_array($settingsMeta)) {
     echo "<div class='alert alert-danger'>" . __('theme_json_error') . "</div>";
     return;
 }
 
 // Kaydetme İşlemi
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_theme_settings'])) {
-    if (!isset($_POST['csrf']) || $_POST['csrf'] !== $_SESSION['csrf']) {
-        die("CSRF Hatası");
+    
+    $csrf = filter_input(INPUT_POST, 'csrf', FILTER_SANITIZE_SPECIAL_CHARS);
+    if (!$csrf || $csrf !== $_SESSION['csrf']) {
+        die(__('csrf_error'));
     }
 
-    foreach ($settingsMeta['fields'] as $field) {
-        $key = $field['id'];
-        $val = $_POST[$key] ?? '';
+    try {
+        $db->beginTransaction();
 
-        // Checkbox handling (comes as 'on' or nothing)
-        if ($field['type'] === 'checkbox') {
-            $val = isset($_POST[$key]) ? '1' : '0';
+        foreach ($settingsMeta['fields'] as $field) {
+            $key = $field['id'];
+            $val = $_POST[$key] ?? '';
+
+            // Checkbox handling (comes as 'on' or nothing)
+            if ($field['type'] === 'checkbox') {
+                $val = isset($_POST[$key]) ? '1' : '0';
+            }
+
+            $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+            if ($driver === 'sqlite') {
+                $stmt = $db->prepare("INSERT INTO theme_settings (theme_name, setting_key, setting_value) 
+                                      VALUES (?, ?, ?) 
+                                      ON CONFLICT(theme_name, setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value");
+                $stmt->execute([$themeName, $key, $val]);
+            } else {
+                // MySQL: ON DUPLICATE KEY UPDATE
+                $stmt = $db->prepare("INSERT INTO theme_settings (theme_name, setting_key, setting_value) 
+                                      VALUES (?, ?, ?) 
+                                      ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+                $stmt->execute([$themeName, $key, $val]);
+            }
+        }
+        
+        $db->commit();
+
+        if (function_exists('sp_log')) {
+             sp_log("Tema ayarları güncellendi: $themeName", 'theme_update');
         }
 
-        $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
-        if ($driver === 'sqlite') {
-            $stmt = $db->prepare("INSERT INTO theme_settings (theme_name, setting_key, setting_value) 
-                                  VALUES (?, ?, ?) 
-                                  ON CONFLICT(theme_name, setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value");
-            $stmt->execute([$themeName, $key, $val]);
-        } else {
-            // MySQL: ON DUPLICATE KEY UPDATE
-            $stmt = $db->prepare("INSERT INTO theme_settings (theme_name, setting_key, setting_value) 
-                                  VALUES (?, ?, ?) 
-                                  ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
-            $stmt->execute([$themeName, $key, $val]);
+        echo "<div class='alert alert-success'>" . __('settings_saved') . "</div>";
+
+    } catch (Exception $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
         }
+        echo "<div class='alert alert-danger'>" . __('operation_failed') . ": " . e($e->getMessage()) . "</div>";
     }
-    echo "<div class='alert alert-success'>" . __('settings_saved') . "</div>";
 }
 
 // Mevcut değerleri çek
@@ -65,7 +104,7 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 <div class="container py-2">
     <div class="d-flex align-items-center mb-4">
         <a href="index.php?page=themes" class="btn btn-sm btn-outline-secondary me-3 shadow-sm rounded-pill">
-            <i class="fas fa-arrow-left"></i> <span lang="back_to_home"><?= __('back_to_home') ?></span>
+            <i class="fas fa-arrow-left"></i> <span lang="back_to_home">Temalara Dön</span>
         </a>
         <h4 class="m-0 fw-bold"><i class="fas fa-palette text-primary me-2"></i>
             <?= e($settingsMeta['title'] ?? $themeName) ?>
@@ -73,42 +112,13 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
     </div>
 
     <style>
-        .theme-card {
-            transition: transform 0.2s;
-        }
-
-        .form-label {
-            font-size: 0.9rem;
-            color: #555;
-        }
-
-        .form-control,
-        .form-select {
-            border-radius: 8px;
-            border: 1px solid #e0e0e0;
-            padding: 0.6rem 0.8rem;
-        }
-
-        .form-control:focus,
-        .form-select:focus {
-            border-color: #0d6efd;
-            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.1);
-        }
-
-        .color-preview-swatch {
-            transition: transform 0.2s;
-            border: 2px solid #fff;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        }
-
-        .color-preview-swatch:hover {
-            transform: scale(1.2);
-        }
-
-        .input-group-text-color {
-            background-color: #fff;
-            border-right: 0;
-        }
+        .theme-card { transition: transform 0.2s; }
+        .form-label { font-size: 0.9rem; color: #555; }
+        .form-control, .form-select { border-radius: 8px; border: 1px solid #e0e0e0; padding: 0.6rem 0.8rem; }
+        .form-control:focus, .form-select:focus { border-color: #0d6efd; box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.1); }
+        .color-preview-swatch { transition: transform 0.2s; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); }
+        .color-preview-swatch:hover { transform: scale(1.2); }
+        .input-group-text-color { background-color: #fff; border-right: 0; }
     </style>
 
     <form method="POST">
@@ -117,8 +127,7 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
         <div class="card shadow-sm border-0 rounded-4">
             <div class="card-header py-3 border-bottom-0">
-                <h6 class="m-0 fw-bold"><i class="fas fa-sliders-h me-2"></i> <span
-                        lang="customize_settings"><?= __('customize_settings') ?></span></h6>
+                <h6 class="m-0 fw-bold"><i class="fas fa-sliders-h me-2"></i> <span lang="customize_settings">Ayarları Özelleştir</span></h6>
             </div>
             <div class="card-body px-4">
                 <?php foreach ($settingsMeta['fields'] as $field): ?>
@@ -131,7 +140,7 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
                             <input type="<?= e($field['type']) ?>" name="<?= e($field['id']) ?>" class="form-control"
                                 value="<?= e($currentValues[$field['id']] ?? $field['default'] ?? '') ?>"
                                 <?php if($field['type'] === 'number'): ?>
-                                    min="<?= e($field['min'] ?? '') ?>" max="<?= e($field['max'] ?? '') ?>" step="<?= e($field['step'] ?? '1') ?>"
+                                    min="<?= e((string)($field['min'] ?? '')) ?>" max="<?= e((string)($field['max'] ?? '')) ?>" step="<?= e((string)($field['step'] ?? '1')) ?>"
                                 <?php endif; ?>>
 
                         <?php elseif ($field['type'] == 'image'): 
@@ -147,7 +156,7 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
                                     <?php if($val): ?>
                                         <img src="<?= e($val) ?>" class="img-fluid rounded preview-img" style="max-height: 120px;">
                                     <?php else: ?>
-                                        <div class="text-muted small no-preview"><i class="fas fa-eye-slash me-1"></i> <?= __('no_preview') ?></div>
+                                        <div class="text-muted small no-preview"><i class="fas fa-eye-slash me-1"></i> <span lang="no_preview">Önizleme Yok</span></div>
                                         <img src="" class="img-fluid rounded preview-img d-none" style="max-height: 120px;">
                                     <?php endif; ?>
                                 </div>
@@ -160,7 +169,6 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
                         <?php elseif ($field['type'] === 'color'):
                             $val = $currentValues[$field['id']] ?? $field['default'] ?? '#000000';
                             $hexVal = $val;
-                            // Ensure it's a valid 6-char hex for the color input
                             if (preg_match('/^#([0-9A-Fa-f]{3})$/', $val, $matches)) {
                                 $hexVal = '#' . $matches[1][0] . $matches[1][0] . $matches[1][1] . $matches[1][1] . $matches[1][2] . $matches[1][2];
                             } elseif (!preg_match('/^#[0-9A-Fa-f]{6}$/', $val)) {
@@ -187,8 +195,7 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
                             <div class="form-check form-switch mt-2">
                                 <input class="form-check-input" type="checkbox" name="<?= e($field['id']) ?>"
                                     <?= ($currentValues[$field['id']] ?? $field['default'] ?? '0') == '1' ? 'checked' : '' ?>>
-                                <label
-                                    class="form-check-label text-muted"><?= e($field['description'] ?? __('activate_it')) ?></label>
+                                <label class="form-check-label text-muted"><?= e($field['description'] ?? __('activate_it')) ?></label>
                             </div>
 
                         <?php elseif ($field['type'] === 'select'): ?>
@@ -217,10 +224,10 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
                             </div>
 
                         <?php elseif ($field['type'] === 'range'): 
-                            $val = $currentValues[$field['id']] ?? $field['default'] ?? '0';
-                            $min = $field['min'] ?? '0';
-                            $max = $field['max'] ?? '100';
-                            $step = $field['step'] ?? '1';
+                            $min = (string)($field['min'] ?? '0');
+                            $max = (string)($field['max'] ?? '100');
+                            $step = (string)($field['step'] ?? '1');
+                            $val = $currentValues[$field['id']] ?? $field['default'] ?? $min;
                         ?>
                             <div class="d-flex align-items-center gap-3">
                                 <input type="range" name="<?= e($field['id']) ?>" class="form-range flex-grow-1" 
@@ -238,7 +245,7 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
             </div>
             <div class="card-footer border-0 p-4 rounded-bottom-4">
                 <button type="submit" class="btn btn-primary px-4 py-2 shadow-sm">
-                    <i class="fas fa-save me-2"></i> <span lang="save_changes"><?= __('save_changes') ?></span>
+                    <i class="fas fa-save me-2"></i> <span lang="save_changes">Kaydet</span>
                 </button>
             </div>
         </div>
@@ -254,24 +261,20 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
             const hexInput = container.querySelector('.hex-input');
             const swatch = container.querySelector('.color-preview-swatch');
 
-            // Sync Color Picker -> Text Input
             colorInput.addEventListener('input', (e) => {
                 const val = e.target.value.toUpperCase();
                 hexInput.value = val;
                 if (swatch) swatch.style.backgroundColor = val;
             });
 
-            // Sync Text Input -> Color Picker
             hexInput.addEventListener('input', (e) => {
                 let val = e.target.value;
                 if (!val.startsWith('#')) val = '#' + val;
 
-                // Basic HEX validation
                 if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
                     colorInput.value = val;
                     if (swatch) swatch.style.backgroundColor = val;
                 } else if (/^#[0-9A-Fa-f]{3}$/.test(val)) {
-                    // Support 3-digit hex
                     const r = val[1] + val[1];
                     const g = val[2] + val[2];
                     const b = val[3] + val[3];
@@ -282,7 +285,6 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
             });
         });
 
-        // Image Preview Logic
         const imageInputs = document.querySelectorAll('.image-url-input');
         imageInputs.forEach(input => {
             input.addEventListener('input', (e) => {
@@ -303,4 +305,3 @@ $currentValues = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
         });
     });
 </script>
-```

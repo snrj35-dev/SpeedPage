@@ -1,4 +1,6 @@
 <?php
+declare(strict_types=1);
+
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/db_switch.php';
@@ -7,27 +9,25 @@ require_once __DIR__ . '/db_switch.php';
 ini_set('memory_limit', '512M');
 set_time_limit(0);
 
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
 // Check Admin
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    echo json_encode(["status" => "error", "message" => "Unauthorized"]);
+    echo json_encode(["status" => "error", "message" => __('access_denied')]);
     exit;
 }
 
-$action = $_POST['action'] ?? '';
+$action = filter_input(INPUT_POST, 'action', FILTER_SANITIZE_SPECIAL_CHARS) ?? '';
 
-// Helper to get Source DB (SQLite currently)
-function getSourceDB()
+function getSourceDB(): DB_Switch
 {
     return new DB_Switch('sqlite', ['path' => DB_PATH]);
 }
 
-// Helper to get Target DB from Session
-function getTargetDB()
+function getTargetDB(): DB_Switch
 {
     if (!isset($_SESSION['migration_target'])) {
-        throw new Exception("Hedef veritabanı oturumu bulunamadı.");
+        throw new Exception(__('target_db_session_not_found') ?: "Target DB session not found.");
     }
     return new DB_Switch($_SESSION['migration_target']['type'], $_SESSION['migration_target']['config']);
 }
@@ -40,7 +40,7 @@ try {
         $name = $_POST['name'] ?? '';
         $user = $_POST['user'] ?? 'root';
         $pass = $_POST['pass'] ?? '';
-        $port = $_POST['port'] ?? ($type === 'pgsql' ? 5432 : 3306);
+        $port = (int) ($_POST['port'] ?? 3306);
 
         $config = [
             'host' => $host,
@@ -59,13 +59,16 @@ try {
             'config' => $config
         ];
 
-        echo json_encode(["status" => "success", "message" => "Bağlantı başarılı! Session'a kaydedildi."]);
+        echo json_encode(["status" => "success", "message" => "Connection successful! Saved to session."]);
+
+        if (function_exists('sp_log'))
+            sp_log("Migration connection test: $type @ $host", "migration_test");
     }
 
     /* ---------------- STEP 2: PREPARE SCHEMA ---------------- */ elseif ($action === 'prepare_schema') {
 
         $source = getSourceDB();
-        $target = getTargetDB(); // This checks session
+        $target = getTargetDB();
 
         $tables = $source->getTables();
         $logs = [];
@@ -76,6 +79,7 @@ try {
 
             $mysqlCols = [];
             $primaryKeys = [];
+            $indexes = []; // Future improvement: indexes
 
             foreach ($cols as $col) {
                 $cName = $col['name'];
@@ -84,7 +88,7 @@ try {
                 $default = $col['dflt_value'] !== null ? "DEFAULT {$col['dflt_value']}" : '';
 
                 // --- Type Conversion Logic ---
-                $newType = 'TEXT'; // Fallback
+                $newType = 'TEXT';
                 $extra = '';
 
                 if (strpos($cType, 'INT') !== false) {
@@ -94,8 +98,8 @@ try {
                         $primaryKeys[] = "`$cName`";
                     }
                 } elseif (strpos($cType, 'CHAR') !== false || strpos($cType, 'TEXT') !== false) {
-                    // For keys/slugs, use VARCHAR to allow indexing
-                    if (in_array($cName, ['key', 'slug', 'name'])) {
+                    // Optimized types for indexing
+                    if (in_array($cName, ['key', 'slug', 'name', 'type', 'setting_key', 'theme_name'])) {
                         $newType = 'VARCHAR(255)';
                     } else {
                         $newType = 'LONGTEXT';
@@ -112,11 +116,11 @@ try {
                         $primaryKeys[] = "`$cName`";
                 }
 
-                // phpMyAdmin / MySQL Primary Key fix for settings table
+                // Fix for settings table key
                 if ($table === 'settings' && $cName === 'key') {
-                    if (!in_array("`$cName`", $primaryKeys)) {
+                    if (!in_array("`$cName`", $primaryKeys))
                         $primaryKeys[] = "`$cName`";
-                    }
+                    $newType = 'VARCHAR(191)'; // UTF8MB4 limit safety
                 }
 
                 $mysqlCols[] = "`$cName` $newType $notNull $extra $default";
@@ -130,9 +134,11 @@ try {
 
             // Execute on Target
             $target->pdo->exec($createSQL);
-            $logs[] = "Tablo oluşturuldu/kontrol edildi: $table";
+            $logs[] = "Table checked/created: $table";
         }
 
+        if (function_exists('sp_log'))
+            sp_log("Migration schema prepared", "migration_schema");
         echo json_encode(["status" => "success", "logs" => $logs, "tables" => $tables]);
     }
 
@@ -141,9 +147,8 @@ try {
         $offset = (int) ($_POST['offset'] ?? 0);
         $limit = 1000;
 
-        if (!$table) {
-            throw new Exception("Tablo adı belirtilmedi.");
-        }
+        if (!$table)
+            throw new Exception("Table name missing.");
 
         $source = getSourceDB();
         $target = getTargetDB();
@@ -151,32 +156,34 @@ try {
         // Count total for progress (only on first call)
         $total = 0;
         if ($offset === 0) {
-            $total = $source->pdo->query("SELECT COUNT(*) FROM `$table`")->fetchColumn();
-            // Truncate target table to avoid duplicates on retry
-            // WARNING: Only truncate if offset is 0
-            // Truncate target table removed for Sync capability (to avoid data loss if just syncing)
-            // $target->pdo->exec("TRUNCATE TABLE `$table`");
+            $total = (int) $source->pdo->query("SELECT COUNT(*) FROM `$table`")->fetchColumn();
+            // Truncate logic removed for safety/sync capabilities
         }
 
         // Fetch Chunk
-        $rows = $source->pdo->query("SELECT * FROM `$table` LIMIT $limit OFFSET $offset")->fetchAll(PDO::FETCH_ASSOC);
+        $stmt = $source->pdo->prepare("SELECT * FROM `$table` LIMIT :lim OFFSET :off");
+        $stmt->bindValue(':lim', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         if (count($rows) > 0) {
             $cols = array_keys($rows[0]);
             $colNames = implode(',', array_map(fn($c) => "`$c`", $cols));
             $placeholders = implode(',', array_fill(0, count($cols), '?'));
 
-            // Use INSERT IGNORE for safer sync
+            // Use INSERT IGNORE/ON DUPLICATE KEY UPDATE might be better but risky without unique keys defined correctly
+            // INSERT IGNORE is safer for migration to avoid duplicate key errors halting process
             $sql = "INSERT IGNORE INTO `$table` ($colNames) VALUES ($placeholders)";
 
             $target->pdo->beginTransaction();
             try {
-                $stmt = $target->pdo->prepare($sql);
+                $stmtInsert = $target->pdo->prepare($sql);
                 foreach ($rows as $row) {
-                    $stmt->execute(array_values($row));
+                    $stmtInsert->execute(array_values($row));
                 }
                 $target->pdo->commit();
-            } catch (Exception $e) {
+            } catch (Throwable $e) {
                 $target->pdo->rollBack();
                 throw $e;
             }
@@ -184,6 +191,10 @@ try {
 
         $nextOffset = $offset + count($rows);
         $finished = count($rows) < $limit;
+
+        if ($finished && function_exists('sp_log')) {
+            // Log per table finish? Maybe too verbose. 
+        }
 
         echo json_encode([
             "status" => "success",
@@ -195,10 +206,8 @@ try {
     }
 
     /* ---------------- STEP 4: FINALIZE ---------------- */ elseif ($action === 'finalize') {
-        // Here we update db.php to point to the new MySQL DB
-        if (!isset($_SESSION['migration_target'])) {
-            throw new Exception("Hedef yapılandırma bulunamadı.");
-        }
+        if (!isset($_SESSION['migration_target']))
+            throw new Exception("Configuration missing.");
 
         $conf = $_SESSION['migration_target'];
 
@@ -212,6 +221,7 @@ try {
         $newContent = "<?php\n";
         $newContent .= "require_once __DIR__ . '/../settings.php';\n\n";
         $newContent .= "// Generator: Migration Wizard\n";
+
         if ($conf['type'] === 'mysql') {
             $host = $conf['config']['host'];
             $name = $conf['config']['name'];
@@ -231,27 +241,31 @@ try {
             $newContent .= "    die(\"Database connection failed: \" . \$e->getMessage());\n";
             $newContent .= "}\n";
         }
+        // MySQL is the focus for external DB migration.
 
         file_put_contents($dbFile, $newContent);
 
-        echo json_encode(["status" => "success", "message" => "Migration tamamlandı! Config güncellendi."]);
+        if (function_exists('sp_log'))
+            sp_log("Migration finalized: Switched to " . $conf['type'], "migration_complete");
+        echo json_encode(["status" => "success", "message" => "Migration complete! Config updated."]);
     }
 
     /* ---------------- STEP: ROLLBACK (EMERGENCY) ---------------- */ elseif ($action === 'rollback') {
-        // Restore db.php.bak
         $dbFile = __DIR__ . '/db.php';
         $bakFile = $dbFile . '.bak';
 
         if (file_exists($bakFile)) {
             copy($bakFile, $dbFile);
-            echo json_encode(["status" => "success", "message" => "Sistem eski haline (SQLite) geri döndürüldü."]);
+            if (function_exists('sp_log'))
+                sp_log("Migration rollback requested", "migration_rollback");
+            echo json_encode(["status" => "success", "message" => "System restored to previous backup (SQLite)."]);
         } else {
-            echo json_encode(["status" => "error", "message" => "Yedek dosyası (db.php.bak) bulunamadı!"]);
+            echo json_encode(["status" => "error", "message" => "Backup file missing!"]);
         }
     } else {
-        echo json_encode(["status" => "error", "message" => "Geçersiz işlem."]);
+        echo json_encode(["status" => "error", "message" => "Invalid action."]);
     }
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
     echo json_encode(["status" => "error", "message" => $e->getMessage()]);
 }

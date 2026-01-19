@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Default Theme Sidebar - Professional Update
  */
@@ -53,8 +54,9 @@ $aboutText = get_theme_setting('custom_sidebar_text', 'SpeedPage CMS ile hayalin
         </h6>
         <ul class="list-unstyled mb-0 d-flex flex-column gap-2">
             <?php foreach ($recentPages as $p): ?>
+                <?php $url = ($settings['friendly_url'] === '1') ? (BASE_PATH . $p['slug']) : (BASE_URL . 'index.php?page=' . $p['slug']); ?>
                 <li>
-                    <a href="?page=<?= e($p['slug']) ?>"
+                    <a href="<?= e($url) ?>"
                         class="text-decoration-none d-flex align-items-center p-2 rounded-3 hover-opacity-100 transition-all border-bottom border-light">
                         <i class="fas fa-arrow-right me-3 text-primary opacity-50" style="font-size: 0.7rem;"></i>
                         <span class="small fw-medium"><?= e($p['title']) ?></span>

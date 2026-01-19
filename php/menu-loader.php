@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 // php/menu-loader.php
 require_once __DIR__ . '/../admin/db.php';
 

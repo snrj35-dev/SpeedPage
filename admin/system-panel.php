@@ -1,21 +1,31 @@
 <?php
-require_once __DIR__ . '/auth.php';
-require_once __DIR__ . '/../settings.php';
+declare(strict_types=1);
+
 /**
  * System Panel (Admin)
  */
+
+require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/../settings.php';
+
+/** @var PDO $db */
+global $db;
 
 $startTime = microtime(true);
 
 $data = [];
 
 // 0. Otomatik Temizlik ve Logları Çek
-sp_log_cleanup(30); // 30 günden eski logları sil
+if (function_exists('sp_log_cleanup')) {
+    sp_log_cleanup(30); // 30 günden eski logları sil
+}
 
 // Logları Çek
 $logs = [];
 try {
-    ensure_log_table();
+    if (function_exists('ensure_log_table')) {
+        ensure_log_table();
+    }
     $logs = $db->query("
         SELECT l.*, u.username 
         FROM logs l 
@@ -23,8 +33,10 @@ try {
         ORDER BY l.id DESC 
         LIMIT 100
     ")->fetchAll(PDO::FETCH_ASSOC);
-} catch (Exception $e) {
-    // Log tablosu henüz yoksa veya hata varsa
+} catch (Throwable $e) {
+    if (function_exists('sp_log')) {
+        sp_log('System Panel Logs Error: ' . $e->getMessage(), 'system_error');
+    }
     $logs = [];
 }
 
@@ -37,20 +49,22 @@ $data['system'] = [
 
 /* Resources (Linux only logic, kept same) */
 if (PHP_OS_FAMILY === 'Linux') {
-    $diskTotal = disk_total_space('/');
+    $diskTotal = disk_total_space('/') ?: 1; // Prevent div by zero
     $diskFree = disk_free_space('/');
     $diskUsed = round((($diskTotal - $diskFree) / $diskTotal) * 100);
 
-    $ramUsed = null;
+    $ramUsed = 0;
     if (is_readable('/proc/meminfo')) {
         $mem = file('/proc/meminfo');
+        $total = 0;
+        $avail = 0;
         foreach ($mem as $line) {
             if (str_starts_with($line, 'MemTotal'))
                 $total = (int) filter_var($line, FILTER_SANITIZE_NUMBER_INT);
             if (str_starts_with($line, 'MemAvailable'))
                 $avail = (int) filter_var($line, FILTER_SANITIZE_NUMBER_INT);
         }
-        if (isset($total, $avail)) {
+        if ($total > 0) {
             $ramUsed = round((($total - $avail) / $total) * 100);
         }
     }
@@ -66,7 +80,7 @@ $data['server'] = [
     'Web Server' => $_SERVER['SERVER_SOFTWARE'] ?? 'CLI',
     'Document Root' => $_SERVER['DOCUMENT_ROOT'] ?? '-',
     'Protocol' => $_SERVER['SERVER_PROTOCOL'] ?? '-',
-    'HTTPS' => (!empty($_SERVER['HTTPS']) ? 'Yes' : 'No'),
+    'HTTPS' => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'Yes' : 'No'),
 ];
 
 /* PHP Metrics */
@@ -126,7 +140,7 @@ $phpLog = ini_get('error_log');
 if ($phpLog && is_readable($phpLog)) {
     $data['logs']['php'] = file_get_contents($phpLog, false, null, max(0, filesize($phpLog) - 5000));
 } else {
-    $data['logs']['php'] = 'Log bulunamadı veya erişim yok';
+    $data['logs']['php'] = __('no_logs');
 }
 
 /* Visitors (Mock or DB) */
@@ -139,7 +153,7 @@ if (file_exists(__DIR__ . "/visitors.db")) {
     }
 } else {
     // Placeholder
-    $data['visitors'][] = ['ip' => $_SERVER['REMOTE_ADDR'], 'time' => date('H:i:s')];
+    $data['visitors'][] = ['ip' => $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1', 'time' => date('H:i:s')];
 }
 
 /* File Permissions */
@@ -150,7 +164,7 @@ foreach ($criticalFiles as $f) {
         $perm = substr(sprintf('%o', fileperms($path)), -3);
         $data['permissions'][$f] = $perm;
     } else {
-        $data['permissions'][$f] = 'Dosya yok';
+        $data['permissions'][$f] = __('no_file');
     }
 }
 
@@ -165,7 +179,7 @@ $data['php_ini'] = [
 // AJAX REQUEST -> Return JSON
 if (isset($_GET['ajax'])) {
     header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+    echo json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
     exit;
 }
 ?>
@@ -254,7 +268,7 @@ if (isset($_GET['ajax'])) {
                         <div id="logs" class="accordion-collapse collapse" data-bs-parent="#sysAccordion">
                             <div class="accordion-body">
                                 <pre class="small"
-                                    style="color:var(--text); white-space:pre-wrap; max-height:300px; overflow:auto;"><?= e($data['logs']['php']) ?></pre>
+                                    style="color:var(--text); white-space:pre-wrap; max-height:300px; overflow:auto;"><?= e((string) $data['logs']['php']) ?></pre>
                             </div>
                         </div>
                     </div>
@@ -295,7 +309,7 @@ if (isset($_GET['ajax'])) {
                                     <div class="d-flex justify-content-between">
                                         <span><?= e($file) ?></span>
                                         <span
-                                            class="badge <?= ($perm === '644' || $perm === '600') ? 'bg-success' : 'bg-danger' ?>"><?= e($perm) ?></span>
+                                            class="badge <?= ($perm === '644' || $perm === '600') ? 'bg-success' : 'bg-danger' ?>"><?= e((string) $perm) ?></span>
                                     </div>
                                 <?php endforeach; ?>
                             </div>
@@ -316,7 +330,7 @@ if (isset($_GET['ajax'])) {
                                 <?php foreach ($data['php_ini'] as $k => $v): ?>
                                     <div class="d-flex justify-content-between">
                                         <span><?= e($k) ?></span>
-                                        <span><?= e($v) ?></span>
+                                        <span><?= e((string) $v) ?></span>
                                     </div>
                                 <?php endforeach; ?>
                             </div>
@@ -334,7 +348,7 @@ if (isset($_GET['ajax'])) {
     <div class="card-header bg-light d-flex justify-content-between align-items-center py-3">
         <h6 class="m-0 text-primary fw-bold">
             <i class="fas fa-history me-2"></i>
-            <span lang="audit_logs">Denetim Logları (Son 100)</span>
+            <span lang="audit_logs">Denetim Logları</span>
         </h6>
         <button class="btn btn-sm btn-outline-danger rounded-pill px-3" onclick="confirmClearLogs()">
             <i class="fas fa-trash-alt me-1"></i> <span lang="clear">Temizle</span>
@@ -362,8 +376,8 @@ if (isset($_GET['ajax'])) {
                     <?php else: ?>
                         <?php foreach ($logs as $log): ?>
                             <tr>
-                                <td><?= $log['id'] ?></td>
-                                <td><?= $log['created_at'] ?></td>
+                                <td><?= e((string) $log['id']) ?></td>
+                                <td><?= e($log['created_at']) ?></td>
                                 <td>
                                     <?php
                                     $badges = [
@@ -414,12 +428,12 @@ if (isset($_GET['ajax'])) {
             <div class="modal-body bg-light">
                 <div class="row">
                     <div class="col-md-6">
-                        <h6 class="border-bottom pb-2 text-danger">Eski Veri (Old)</h6>
+                        <h6 class="border-bottom pb-2 text-danger" lang="old_data">Eski Veri</h6>
                         <pre id="logOld" class="bg-body border p-3 rounded"
                             style="max-height: 400px; overflow: auto;"></pre>
                     </div>
                     <div class="col-md-6">
-                        <h6 class="border-bottom pb-2 text-success">Yeni Veri (New)</h6>
+                        <h6 class="border-bottom pb-2 text-success" lang="new_data">Yeni Veri</h6>
                         <pre id="logNew" class="bg-body border p-3 rounded"
                             style="max-height: 400px; overflow: auto;"></pre>
                     </div>
@@ -448,7 +462,7 @@ if (isset($_GET['ajax'])) {
     }
 
     function confirmClearLogs() {
-        if (!confirm("Tüm log kayıtları kalıcı olarak silinecektir. Bu işlemi onaylıyor musunuz?")) return;
+        if (!confirm("<?= __('confirm_clear_logs') ?>")) return;
 
         const formData = new FormData();
         formData.append('action', 'clear_logs');
@@ -469,7 +483,7 @@ if (isset($_GET['ajax'])) {
             })
             .catch(err => {
                 console.error(err);
-                alert("İşlem sırasında bir hata oluştu.");
+                alert("<?= __('generic_error') ?>");
             });
     }
 </script>

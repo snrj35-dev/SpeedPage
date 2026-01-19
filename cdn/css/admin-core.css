@@ -213,6 +213,7 @@ a:hover {
     background-color: var(--bg-soft);
     border: 1px solid var(--border);
     border-radius: .5rem;
+    padding: 8px;
 }
 
 /* ================================
@@ -323,6 +324,18 @@ textarea:focus {
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: .6rem;
+}
+
+.modal {
+    z-index: 1050;
+}
+
+.modal-backdrop {
+    z-index: 1040;
+}
+
+#browserModal {
+    z-index: 1060;
 }
 
 .modal-header,

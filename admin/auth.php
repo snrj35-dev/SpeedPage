@@ -1,27 +1,35 @@
 <?php
+declare(strict_types=1);
 // auth.php — Session & access control
 
 require_once __DIR__ . '/db.php';
+/** @var PDO $db */
+global $db;
 
 // Session süresini ayarla
 try {
     $s_stmt = $db->query("SELECT value FROM settings WHERE `key`='session_duration'");
     $s_duration = $s_stmt->fetchColumn();
     if ($s_duration) {
-        ini_set('session.gc_maxlifetime', (int) $s_duration);
-        session_set_cookie_params((int) $s_duration);
+        $duration = (int) $s_duration;
+        ini_set('session.gc_maxlifetime', (string) $duration);
+        session_set_cookie_params($duration);
     }
 } catch (Exception $e) {
+    // Silent fail for session settings
 }
 
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 // XSS Protection Helper
 if (!function_exists('e')) {
-    function e($str)
+    function e(?string $str): string
     {
-        if ($str === null)
+        if ($str === null) {
             return '';
+        }
         return htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
     }
 }
@@ -45,22 +53,16 @@ $username = htmlspecialchars($_SESSION['username'] ?? 'Unknown');
 $role = $_SESSION['role'] ?? null;
 if (!$role && isset($_SESSION['user_id'])) {
     try {
-        if (file_exists(__DIR__ . '/db.php')) {
-            require_once __DIR__ . '/db.php';
-            $stmt = $db->prepare("SELECT role FROM users WHERE id=? LIMIT 1");
-            $stmt->execute([(int) $_SESSION['user_id']]);
-            $r = $stmt->fetch(PDO::FETCH_ASSOC);
-            $role = $r['role'] ?? 'user';
-            $_SESSION['role'] = $role;
-        } else {
-            $role = 'user';
-        }
+        // We already required db.php above
+        $stmt = $db->prepare("SELECT role FROM users WHERE id=? LIMIT 1");
+        $stmt->execute([(int) $_SESSION['user_id']]);
+        $r = $stmt->fetch(PDO::FETCH_ASSOC);
+        $role = $r['role'] ?? 'user';
+        $_SESSION['role'] = $role;
     } catch (Throwable $e) {
         $role = 'user';
     }
 }
-
-// ... (Önceki kodlarınız: session_start, DB bağlantısı vb.)
 
 // Helper: is current user admin or editor?
 $role = $role ?? 'user';

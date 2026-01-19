@@ -34,7 +34,6 @@
                                     <label class="form-label" lang="db_type">Veritabanı Türü</label>
                                     <select class="form-select" name="type" id="db_type">
                                         <option value="mysql">MySQL / MariaDB</option>
-                                        <option value="pgsql">PostgreSQL</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6 mb-3">

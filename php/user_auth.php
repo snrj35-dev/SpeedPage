@@ -1,24 +1,29 @@
 <?php
-// user_auth.php — Login kontrolü + CSRF token üretimi
+declare(strict_types=1);
 
-session_start();
+// user_auth.php — Login Check + CSRF Token Generation
 
-// Kullanıcı giriş yapmamışsa login sayfasına yönlendir
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Redirect if not logged in
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit();
 }
 
-// CSRF token üretimi (yoksa oluştur)
+// CSRF token generation
 if (empty($_SESSION['csrf'])) {
     $_SESSION['csrf'] = bin2hex(random_bytes(32));
 }
 
-// CSRF doğrulama helper
-function check_csrf() {
+// CSRF validation helper
+function check_csrf(): void
+{
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!isset($_POST['csrf']) || $_POST['csrf'] !== $_SESSION['csrf']) {
-            die('CSRF hatası');
+            die('CSRF Error');
         }
     }
 }

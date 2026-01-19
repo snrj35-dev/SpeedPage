@@ -2,9 +2,9 @@
 let selectedFiles = [];
 let fileListCache = [];
 let diffDataCache = {};
-let allModelsCache = [];
-let customModelsCache = [];
-let manageModal; // Bootstrap modal instance
+let existingProviders = [];
+let currentProviderKey = '';
+let detailsModal; // Bootstrap modal instance
 
 // --- UTILS ---
 
@@ -115,9 +115,6 @@ function appendMessage(role, content) {
                 old: oldCode.trim(),
                 new: newCode.trim()
             };
-            // Return raw HTML placeholder. 
-            // Note: If parseMarkdown runs later, it needs to handle this DIV gracefully.
-            // We ensure this DIV is separated by newlines to often help markdown parsers treat it as block HTML.
             return `\n\n<div class="card my-2 border-primary">
                         <div class="card-body p-2 d-flex justify-content-between align-items-center">
                             <span><i class="fas fa-file-code me-2"></i> ${filePath.trim()}</span>
@@ -171,7 +168,6 @@ function openDiffModal(id) {
     const diffNewCode = document.getElementById('diff-new-code');
     const btnApplyPatch = document.querySelector('#modal-diff-view .btn-success');
 
-    // Store current data on the button for access
     if (btnApplyPatch) btnApplyPatch.dataset.currentDiffId = id;
 
     if (diffTitle) diffTitle.textContent = 'Değişiklik: ' + data.file;
@@ -195,39 +191,69 @@ function openDiffModal(id) {
     }
 }
 
-// --- MODEL FUNCTIONS ---
+// --- PROVIDER & MODEL LOGIC ---
 
-function renderCustomModels() {
-    const customModelList = document.getElementById('custom-model-list');
-    if (!customModelList) return;
+function loadProviders() {
+    $.post('aisistem.php', { action: 'get_settings' }, (res) => {
+        try {
+            const data = (typeof res === 'object') ? res : JSON.parse(res);
+            if (data.status === 'success') {
+                existingProviders = data.providers;
+                renderProviderSelect();
+            }
+        } catch (e) {
+            console.error("Provider load error", e);
+        }
+    });
+}
 
-    customModelList.innerHTML = '';
-    if (customModelsCache.length === 0) {
-        customModelList.innerHTML = '<div class="text-center text-muted small p-2">Henüz özel model eklenmedi.</div>';
+function renderProviderSelect() {
+    const select = document.getElementById('ai-provider-select');
+    if (!select) return;
+
+    // Preserve selection if possible
+    const currentVal = select.value || (existingProviders.length > 0 ? existingProviders[0].provider_key : '');
+
+    select.innerHTML = '';
+
+    existingProviders.forEach(p => {
+        // Only show enabled providers in the main chat dropdown? Or show all but mark disabled?
+        // Let's show all for now, maybe add (Disabled) text
+        const opt = document.createElement('option');
+        opt.value = p.provider_key;
+        opt.textContent = p.provider_name + (p.is_enabled == 1 ? '' : ' (Kapalı)');
+        if (p.provider_key === currentVal) opt.selected = true;
+        select.appendChild(opt);
+    });
+
+    // Trigger change to load models
+    select.dispatchEvent(new Event('change'));
+}
+
+function updateModelSelect(providerKey) {
+    const modelSelect = document.getElementById('ai-model-select');
+    if (!modelSelect) return;
+
+    modelSelect.innerHTML = '';
+
+    const provider = existingProviders.find(p => p.provider_key === providerKey);
+    if (!provider || !provider.models) {
+        modelSelect.innerHTML = '<option disabled>Model bulunamadı</option>';
         return;
     }
 
-    customModelsCache.forEach((model, index) => {
-        const item = document.createElement('div');
-        item.className = 'list-group-item d-flex justify-content-between align-items-center';
-        item.innerHTML = `
-            <div>
-                <strong>${model.name}</strong><br>
-                <small class="text-muted">${model.id}</small>
-            </div>
-            <button class="btn btn-sm btn-outline-danger btn-delete-model" data-index="${index}">
-                <i class="fas fa-trash"></i>
-            </button>
-        `;
-        customModelList.appendChild(item);
-    });
+    let models = provider.models;
+    if (typeof models === 'string') {
+        try { models = JSON.parse(models); } catch (e) { models = []; }
+    }
 
-    document.querySelectorAll('.btn-delete-model').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const idx = e.currentTarget.getAttribute('data-index');
-            customModelsCache.splice(idx, 1);
-            renderCustomModels();
-        });
+    if (!Array.isArray(models)) models = [];
+
+    models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name + (m.free ? ' (Ücretsiz)' : '');
+        modelSelect.appendChild(opt);
     });
 }
 
@@ -239,146 +265,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatArea = document.getElementById('ai-chat-area');
     const userInput = document.getElementById('ai-user-input');
     const sendBtn = document.getElementById('btn-send-ai');
-    const apiKeyInput = document.getElementById('ai-api-key');
-    const saveApiBtn = document.getElementById('btn-save-api');
+
+    const providerSelect = document.getElementById('ai-provider-select');
     const modelSelect = document.getElementById('ai-model-select');
+    const btnManageProviders = document.getElementById('btn-manage-providers');
+
     const fileBrowser = document.getElementById('mini-file-browser');
     const fileSearch = document.getElementById('file-search-mini');
-    const apiKeyStatus = document.getElementById('api-key-status');
     const btnAttach = document.getElementById('btn-attach-file');
-
-    // Refresh files btn
     const refreshBtn = document.getElementById('btn-refresh-files');
-    if (refreshBtn) refreshBtn.addEventListener('click', loadFiles);
 
-    // File Search Listener
-    if (fileSearch) {
-        fileSearch.addEventListener('input', (e) => {
-            const term = e.target.value.toLowerCase();
-            const filtered = fileListCache.filter(f => f.toLowerCase().includes(term));
-            renderFileList(filtered);
+    // Init Providers
+    loadProviders();
+    loadFiles();
+
+    // Provider Change Event
+    if (providerSelect) {
+        providerSelect.addEventListener('change', () => {
+            currentProviderKey = providerSelect.value;
+            updateModelSelect(currentProviderKey);
         });
     }
 
-    // --- AUTO ANALYZE BUG REPORT ---
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('auto_analyze') === '1') {
-        const reportRaw = localStorage.getItem('ai_bug_report');
-        if (reportRaw && userInput && sendBtn) {
-            try {
-                const report = JSON.parse(reportRaw);
-                localStorage.removeItem('ai_bug_report');
-
-                const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?page=aipanel';
-                window.history.pushState({ path: newUrl }, '', newUrl);
-
-                let prompt = `🚨 **HATA Raporu Analizi**\n\n` +
-                    `**Sayfa:** ${report.url}\n` +
-                    `**Zaman:** ${report.timestamp}\n\n` +
-                    `**Konsol Hataları:**\n` +
-                    (report.errors.length ? '```\n' + report.errors.join('\n') + '\n```' : '_Konsolda hata görünmüyor._') +
-                    `\n\n**Sayfa İçeriği Özeti:**\n` +
-                    '```\n' + report.html.substring(0, 1000) + '...\n```\n\n' +
-                    `Bu sayfada bir sorun tespit ettim. Yukarıdaki verilere ve sistem loglarına (snapshot) dayanarak hatanın kaynağını ve çözümünü bulabilir misin?`;
-
-                setTimeout(() => {
-                    userInput.value = prompt;
-                    userInput.style.height = 'auto';
-                    userInput.style.height = (userInput.scrollHeight) + 'px';
-                    sendBtn.click();
-                }, 500);
-
-            } catch (e) {
-                console.error("Rapor parse hatası", e);
-            }
-        }
-    }
-
-    // Auto-resize textarea
-    if (userInput) {
-        userInput.addEventListener('input', function () {
-            this.style.height = 'auto';
-            this.style.height = (this.scrollHeight) + 'px';
-            if (this.value === '') this.style.height = 'auto';
-        });
-
-        userInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendBtn.click();
-            }
-        });
-    }
-
-    // --- API & SETTINGS ---
-    function loadSettings() {
-        $.post('aisistem.php', { action: 'get_settings' }, (res) => {
-            try {
-                const data = (typeof res === 'object') ? res : JSON.parse(res);
-                if (data.status === 'success') {
-                    if (apiKeyInput) apiKeyInput.value = data.api_key;
-
-                    const apiUrlInput = document.getElementById('ai-api-url');
-                    if (apiUrlInput) apiUrlInput.value = data.api_url || 'https://openrouter.ai/api/v1';
-
-                    if (!data.api_key && apiKeyStatus) {
-                        apiKeyStatus.classList.remove('d-none');
-                    } else if (apiKeyStatus) {
-                        apiKeyStatus.classList.add('d-none');
-                    }
-                    // ... (rest of models logic)
-                    if (modelSelect) {
-                        modelSelect.innerHTML = '';
-                        allModelsCache = data.system_models || [];
-                        if (data.custom_models_raw) {
-                            customModelsCache = data.custom_models_raw;
-                        }
-
-                        allModelsCache.forEach(m => {
-                            const opt = document.createElement('option');
-                            opt.value = m.id;
-                            opt.textContent = m.name;
-                            if (m.id === data.selected_model) opt.selected = true;
-                            modelSelect.appendChild(opt);
-                        });
-                    }
-                }
-            } catch (e) {
-                console.error("Settings load error", e);
-            }
-        });
-    }
-
-    if (saveApiBtn) {
-        saveApiBtn.addEventListener('click', () => {
-            const key = apiKeyInput.value.trim();
-            const url = document.getElementById('ai-api-url') ? document.getElementById('ai-api-url').value.trim() : '';
-            const model = modelSelect ? modelSelect.value : '';
-
-            $.post('aisistem.php', {
-                action: 'save_settings',
-                api_key: key,
-                api_url: url,
-                model: model
-            }, (res) => {
-                const data = (typeof res === 'object') ? res : JSON.parse(res);
-                if (data.status === 'success') {
-                    if (apiKeyStatus) apiKeyStatus.classList.add('d-none');
-                    alert('Ayarlar kaydedildi.');
-                }
-            });
-        });
-    }
-
-    if (modelSelect) {
-        modelSelect.addEventListener('change', () => {
-            const model = modelSelect.value;
-            $.post('aisistem.php', { action: 'save_settings', model: model }, () => {
-                console.log('Model tercihi güncellendi.');
-            });
-        });
-    }
-
+    // Refresh Files
     function loadFiles() {
         if (!fileBrowser) return;
         fileBrowser.innerHTML = '<div class="text-center p-3"><i class="fas fa-spinner fa-spin"></i></div>';
@@ -390,11 +299,120 @@ document.addEventListener('DOMContentLoaded', () => {
                     renderFileList(fileListCache);
                 }
             } catch (e) {
-                console.error("File list error", e);
                 fileBrowser.innerHTML = '<div class="text-danger p-2">Listeleme hatası.</div>';
             }
         });
     }
+    if (refreshBtn) refreshBtn.addEventListener('click', loadFiles);
+
+    // File Search Listener
+    if (fileSearch) {
+        fileSearch.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const filtered = fileListCache.filter(f => f.toLowerCase().includes(term));
+            renderFileList(filtered);
+        });
+    }
+
+    // --- MANAGE PROVIDERS MODAL ---
+
+    const modalEl = document.getElementById('modal-provider-details');
+    const btnSaveProvider = document.getElementById('btn-save-provider');
+    const btnAddModelRow = document.getElementById('btn-add-model-row');
+    const editModelList = document.getElementById('edit-model-list');
+
+    if (btnManageProviders) {
+        btnManageProviders.addEventListener('click', () => {
+            // Open modal for the CURRENT selected provider
+            const pKey = providerSelect.value;
+            const p = existingProviders.find(x => x.provider_key === pKey);
+            if (!p) return;
+
+            openProviderModal(p);
+        });
+    }
+
+    function openProviderModal(provider) {
+        if (!modalEl) return;
+
+        document.getElementById('provider-modal-title').textContent = provider.provider_name + ' Ayarları';
+        document.getElementById('edit-provider-key').value = provider.provider_key;
+        document.getElementById('edit-api-key').value = provider.api_key || '';
+        document.getElementById('edit-is-enabled').checked = (provider.is_enabled == 1);
+
+        // Render Models
+        editModelList.innerHTML = '';
+
+        let models = provider.models || [];
+        if (typeof models === 'string') {
+            try { models = JSON.parse(models); } catch (e) { models = []; }
+        }
+
+        models.forEach(m => addModelRow(m.id, m.name, m.free));
+
+        if (typeof bootstrap !== 'undefined') {
+            detailsModal = new bootstrap.Modal(modalEl);
+            detailsModal.show();
+        }
+    }
+
+    function addModelRow(id = '', name = '', free = false) {
+        const div = document.createElement('div');
+        div.className = 'd-flex gap-2 align-items-center mb-1';
+        div.innerHTML = `
+            <input type="text" class="form-control form-control-sm" placeholder="Model ID" value="${id}" data-type="id">
+            <input type="text" class="form-control form-control-sm" placeholder="Görünen İsim" value="${name}" data-type="name">
+            <div class="form-check" title="Ücretsiz mi?">
+                <input class="form-check-input" type="checkbox" ${free ? 'checked' : ''} data-type="free">
+            </div>
+            <button class="btn btn-sm btn-outline-danger btn-remove-row"><i class="fas fa-times"></i></button>
+        `;
+        div.querySelector('.btn-remove-row').addEventListener('click', () => div.remove());
+        editModelList.appendChild(div);
+    }
+
+    if (btnAddModelRow) {
+        btnAddModelRow.addEventListener('click', () => addModelRow());
+    }
+
+    if (btnSaveProvider) {
+        btnSaveProvider.addEventListener('click', () => {
+            const key = document.getElementById('edit-provider-key').value;
+            const apiKey = document.getElementById('edit-api-key').value.trim();
+            const isEnabled = document.getElementById('edit-is-enabled').checked ? 1 : 0;
+
+            // Gather models
+            const models = [];
+            Array.from(editModelList.children).forEach(row => {
+                const id = row.querySelector('[data-type="id"]').value.trim();
+                const name = row.querySelector('[data-type="name"]').value.trim();
+                const free = row.querySelector('[data-type="free"]').checked;
+                if (id && name) {
+                    models.push({ id, name, free });
+                }
+            });
+
+            $.post('aisistem.php', {
+                action: 'save_provider',
+                provider_key: key,
+                api_key: apiKey,
+                is_enabled: isEnabled,
+                models: JSON.stringify(models)
+            }, (res) => {
+                let data = {};
+                try { data = typeof res === 'object' ? res : JSON.parse(res); } catch (e) { }
+
+                if (data.status === 'success') {
+                    alert('Kaydedildi!');
+                    if (detailsModal) detailsModal.hide();
+                    loadProviders(); // Refresh UI
+                } else {
+                    alert('Hata: ' + (data.message || 'Bilinmeyen'));
+                }
+            });
+        });
+    }
+
 
     // --- CHAT LOGIC ---
 
@@ -403,9 +421,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const text = userInput.value.trim();
             if (!text) return;
 
-            appendMessage('user', text); // Global function
+            appendMessage('user', text);
             userInput.value = '';
-            userInput.style.height = 'auto';
 
             const loadingId = 'loading-' + Date.now();
             const loadingDiv = document.createElement('div');
@@ -419,6 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 action: 'chat',
                 prompt: text,
                 files: selectedFiles,
+                provider: providerSelect ? providerSelect.value : 'gemini',
                 model: modelSelect ? modelSelect.value : ''
             };
 
@@ -432,8 +450,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (lDiv) lDiv.remove();
 
                     try {
-                        console.log("[DEBUG] AI Raw Response:", response);
-
                         let data;
                         if (typeof response === 'object') {
                             data = response;
@@ -442,22 +458,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
 
                         if (data.status === 'success') {
-                            if (data.log_id) {
-                                $.ajax({
-                                    url: 'aisistem.php',
-                                    type: 'POST',
-                                    data: { action: 'get_response_text', log_id: data.log_id },
-                                    dataType: 'text',
-                                    success: function (rawText) {
-                                        appendMessage('ai', rawText);
-                                    },
-                                    error: function (xhr, st, err) {
-                                        console.error("Metin çekme hatası:", err);
-                                        appendMessage('ai', '**Sistem Hatası:** Yanıt metni çekilemedi.');
-                                    }
-                                });
-                            }
-                            else if (data.content) {
+                            if (data.content) {
                                 appendMessage('ai', data.content);
                             } else {
                                 appendMessage('ai', '_(Boş yanıt)_');
@@ -466,85 +467,42 @@ document.addEventListener('DOMContentLoaded', () => {
                             appendMessage('ai', `**Hata:** ${data.message || 'Bilinmeyen hata.'}`);
                         }
                     } catch (e) {
-                        console.error("AI Logic Error:", e);
                         appendMessage('ai', `**Sistem Hatası:** ${e.message}`);
                     }
                 },
                 error: function (xhr, status, error) {
                     const lDiv = document.getElementById(loadingId);
                     if (lDiv) lDiv.remove();
-                    console.error("AJAX Error:", status, error);
                     appendMessage('ai', `**Hata:** Sunucu bağlantı hatası (${xhr.status}).`);
                 }
             });
         });
     }
 
-    // --- MODEL MANAGEMENT MODAL ---
-    const manageModelsBtn = document.getElementById('btn-manage-models');
-    const modalManageModels = document.getElementById('modal-manage-models');
-    const btnAddModel = document.getElementById('btn-add-model');
-    const btnSaveCustomModels = document.getElementById('btn-save-custom-models');
-    const newModelId = document.getElementById('new-model-id');
-    const newModelName = document.getElementById('new-model-name');
+    // Auto-resize textarea
+    if (userInput) {
+        userInput.addEventListener('input', function () {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
 
-    if (manageModelsBtn) {
-        manageModelsBtn.addEventListener('click', () => {
-            if (typeof bootstrap !== 'undefined') {
-                manageModal = new bootstrap.Modal(modalManageModels);
-                renderCustomModels();
-                manageModal.show();
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendBtn.click();
             }
         });
     }
 
-    if (btnAddModel) {
-        btnAddModel.addEventListener('click', () => {
-            const id = newModelId.value.trim();
-            const name = newModelName.value.trim();
-            if (!id || !name) { alert('Lütfen ID ve İsim girin.'); return; }
-
-            if (customModelsCache.some(m => m.id === id) || allModelsCache.some(m => m.id === id)) {
-                alert('Bu ID zaten listede var.'); return;
-            }
-
-            customModelsCache.push({ id: id, name: name, free: false });
-            newModelId.value = ''; newModelName.value = '';
-            renderCustomModels();
-        });
-    }
-
-    if (btnSaveCustomModels) {
-        btnSaveCustomModels.addEventListener('click', () => {
-            $.post('aisistem.php', {
-                action: 'save_models',
-                models: JSON.stringify(customModelsCache)
-            }, (res) => {
-                let data;
-                try { data = (typeof res === 'object') ? res : JSON.parse(res); } catch (e) { }
-                if (data && data.status === 'success') {
-                    alert('Modeller güncellendi!');
-                    if (manageModal) manageModal.hide();
-                    loadSettings();
-                } else {
-                    alert('Hata oluştu.');
-                }
-            });
-        });
-    }
-
-    // Apply Patch Listener (Delegated because it's inside a modal usually, or button exists always? It exists always in modal)
+    // --- APPLY PATCH DELEGATED ---
     const btnApplyPatch = document.querySelector('#modal-diff-view .btn-success');
     if (btnApplyPatch) {
         btnApplyPatch.addEventListener('click', () => {
             const id = btnApplyPatch.dataset.currentDiffId;
             const currentDiffData = diffDataCache[id];
-
             if (!currentDiffData) return;
 
-            if (!confirm('DİKKAT: Bu değişiklik dosyaya yazılacak. Yedek alınacak ancak yine de emin misiniz?')) {
-                return;
-            }
+            if (!confirm('DİKKAT: Bu değişiklik dosyaya yazılacak. Yedek alınacak ancak yine de emin misiniz?')) return;
 
             btnApplyPatch.disabled = true;
             btnApplyPatch.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uygulanıyor...';
@@ -566,24 +524,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     const modalEl = document.getElementById('modal-diff-view');
                     const modal = bootstrap.Modal.getInstance(modalEl);
                     if (modal) modal.hide();
-
-                    /* 
-                    // Sayfa yenileme iptal edildi (Chat geçmişi kaybolmasın diye)
-                    const currentPage = new URLSearchParams(window.location.search).get('page') || 'home';
-                    if (typeof window.loadPage === 'function') {
-                        // window.loadPage(currentPage);
-                    } else {
-                        // location.reload();
-                    }
-                    */
                 } else {
                     alert('HATA: ' + (data ? data.message : 'Bilinmeyen hata'));
                 }
             });
         });
     }
-
-    // Init
-    loadSettings();
-    loadFiles();
 });
+
+// Expose openDiffModal globally
+window.openDiffModal = openDiffModal;

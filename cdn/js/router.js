@@ -1,6 +1,15 @@
 const content = document.getElementById("page-content");
 const loader = document.getElementById("page-loader");
-
+// Dinamik URL oluşturucu (Ayara göre link formatını belirler)
+function getUrl(page) {
+    if (typeof FRIENDLY_URL !== 'undefined' && FRIENDLY_URL === "1") {
+        // Eğer panelden Friendly URL aktifse: /new/home
+        return BASE_PATH + page;
+    } else {
+        // Kapalıysa veya .htaccess yoksa: /new/?page=home
+        return BASE_PATH + "?page=" + page;
+    }
+}
 function loadPage(page = "home", push = true) {
     loader.classList.remove("d-none");
 
@@ -12,7 +21,7 @@ function loadPage(page = "home", push = true) {
             loader.classList.add("d-none");
 
             if (push) {
-                history.pushState({ page }, "", `?page=${page}`);
+                history.pushState({ page }, "", getUrl(page));
             }
         })
         .catch(() => {
@@ -20,7 +29,27 @@ function loadPage(page = "home", push = true) {
             loader.classList.add("d-none");
         });
 }
+window.addEventListener("DOMContentLoaded", () => {
+    const currentPath = window.location.pathname;
+    const urlParams = new URLSearchParams(window.location.search);
+    let initialPage = "home";
 
+    // 1. ÖNCE: URL'de ?page= var mı bak (Bu her zaman öncelikli olmalı)
+    if (urlParams.has("page")) {
+        initialPage = urlParams.get("page");
+    }
+    // 2. SONRA: Eğer Friendly URL aktifse path'den yakala
+    else if (typeof FRIENDLY_URL !== 'undefined' && FRIENDLY_URL === "1") {
+        const cleanPath = currentPath.replace(BASE_PATH, "").replace(/^\/+|\/+$/g, "");
+        // index.php dosyasını veya boş yolu ele
+        if (cleanPath !== "" && cleanPath !== "index.php") {
+            initialPage = cleanPath;
+        }
+    }
+
+    // Yakalanan sayfayı yükle
+    loadPage(initialPage, false);
+});
 window.addEventListener("popstate", e => {
     if (e.state?.page) loadPage(e.state.page, false);
 });
@@ -30,11 +59,10 @@ document.addEventListener("click", e => {
     if (!link) return;
 
     e.preventDefault();
+    const targetPage = link.dataset.page;
     loadPage(link.dataset.page);
 });
 
-const urlParams = new URLSearchParams(window.location.search);
-loadPage(urlParams.get("page") || "home", false);
 
 let loadedJS = new Set();
 let loadedCSS = new Set();
@@ -43,32 +71,38 @@ function injectAssets(assets) {
 
     // ✅ CSS dosyaları
     (assets.css || []).forEach(css => {
-        if (loadedCSS.has(css)) return;
-        loadedCSS.add(css);
+        let finalPath = (css.includes('modules/') || css.includes('themes/') || css.includes('http'))
+            ? css
+            : 'cdn/css/' + css;
+
+        if (!finalPath.startsWith("http") && !finalPath.startsWith("/")) {
+            finalPath = BASE_PATH + finalPath;
+        }
+
+        if (loadedCSS.has(finalPath)) return;
+        loadedCSS.add(finalPath);
 
         const link = document.createElement("link");
         link.rel = "stylesheet";
-
-        // ✅ BASE_PATH ekle
-        link.href = css.startsWith("/") 
-            ? BASE_PATH + css.substring(1)
-            : BASE_PATH + css;
-
+        link.href = finalPath;
         document.head.appendChild(link);
     });
 
     // ✅ JS dosyaları
     (assets.js || []).forEach(js => {
-        if (loadedJS.has(js)) return;
-        loadedJS.add(js);
+        let finalPath = (js.includes('modules/') || js.includes('themes/') || js.includes('http'))
+            ? js
+            : 'cdn/js/' + js;
+
+        if (!finalPath.startsWith("http") && !finalPath.startsWith("/")) {
+            finalPath = BASE_PATH + finalPath;
+        }
+
+        if (loadedJS.has(finalPath)) return;
+        loadedJS.add(finalPath);
 
         const script = document.createElement("script");
-
-        // ✅ BASE_PATH ekle
-        script.src = js.startsWith("/") 
-            ? BASE_PATH + js.substring(1)
-            : BASE_PATH + js;
-
+        script.src = finalPath;
         script.defer = true;
         document.body.appendChild(script);
     });

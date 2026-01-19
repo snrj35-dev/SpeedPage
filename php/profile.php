@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 require_once '../settings.php';
 require_once '../admin/db.php';
 require_once 'user_auth.php'; // already calls session_start()
@@ -87,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $params[] = $user_id;
         $sql = "UPDATE users SET " . implode(", ", $update_fields) . " WHERE id = ?";
         $db->prepare($sql)->execute($params);
-        header("Location: profile.php?id=$user_id&status=success");
+        header("Location: " . BASE_URL . "php/profile.php?id=$user_id&status=success");
         exit;
     }
 }

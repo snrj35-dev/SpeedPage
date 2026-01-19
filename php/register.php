@@ -1,26 +1,32 @@
 <?php
+declare(strict_types=1);
+
 require_once '../settings.php';
 require_once '../admin/db.php';
 require_once 'theme-init.php';
 require_once 'menu-loader.php';
+/** @var PDO $db */
+global $db;
 
-session_start();
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
-$q = $db->query("SELECT `key`, `value` FROM settings");
-$config = $q->fetchAll(PDO::FETCH_KEY_PAIR);
+$stmt = $db->query("SELECT `key`, `value` FROM settings");
+$config = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 $settings = $config;
 
 $menus = getMenus('navbar');
 
 if (($config['registration_enabled'] ?? '1') === '0') {
-    die('<div class="alert alert-warning text-center small"><span lang="registration_closed"></span> <a href="../index.php"><span lang="back_to_home"></span></a></div>');
+    die('<div class="alert alert-warning text-center small"><span lang="registration_closed"></span> <a href="' . BASE_URL . '"><span lang="back_to_home"></span></a></div>');
 }
 
 $error_message = '';
 $success_message = '';
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $ip = $_SERVER['REMOTE_ADDR'];
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
     $max_attempts = (int) ($config['max_login_attempts'] ?? 5);
     $block_minutes = (int) ($config['login_block_duration'] ?? 15);
     $block_time = $block_minutes * 60;
@@ -31,8 +37,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     if ($attempt && $attempt['attempts'] >= $max_attempts) {
         if (time() - $attempt['last_attempt'] < $block_time) {
-            $remaining = ceil(($block_time - (time() - $attempt['last_attempt'])) / 60);
-            $error_message = 'Çok fazla deneme. Lütfen ' . $remaining . ' dakika sonra tekrar deneyin.';
+            $remaining = (int) ceil(($block_time - (time() - $attempt['last_attempt'])) / 60);
+            $msg = function_exists('__') ? __('err_too_many_attempts', $remaining) : "Too many attempts. Wait $remaining min.";
+            $error_message = e($msg);
         } else {
             $db->prepare("DELETE FROM login_attempts WHERE ip_address = ?")->execute([$ip]);
         }
@@ -41,12 +48,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     if (empty($error_message) && !empty($config['login_captcha']) && $config['login_captcha'] == '1') {
         require_once 'captcha_lib.php';
         if (!Captcha::verify($_POST['captcha_selection'] ?? '')) {
-            $error_message = 'Güvenlik doğrulaması başarısız.';
+            $msg = function_exists('__') ? __('err_captcha_fail') : 'Security check failed.';
+            $error_message = e($msg);
         }
     }
 
     if (empty($error_message)) {
-        $username = trim($_POST['kullanici_adi'] ?? '');
+        $username = trim(filter_input(INPUT_POST, 'kullanici_adi', FILTER_SANITIZE_FULL_SPECIAL_CHARS) ?? '');
         $password = $_POST['parola'] ?? '';
         $password_confirm = $_POST['parola_tekrar'] ?? '';
 
@@ -66,12 +74,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     $hash = password_hash($password, PASSWORD_DEFAULT);
                     $is_active = ($config['email_verification'] === '1') ? 0 : 1;
                     $ins = $db->prepare("INSERT INTO users (username, display_name, password_hash, role, is_active, avatar_url) VALUES (?, ?, ?, 'user', ?, 'fa-user')");
+                    // Using default avatar 'fa-user'
                     $ins->execute([$username, $username, $hash, $is_active]);
                     $success_message = '<span lang="registration_success"></span>';
-                    header("Refresh: 2; url=login.php");
+                    header("Refresh: 2; url=" . BASE_URL . "php/login.php");
                 }
             } catch (Exception $e) {
-                $error_message = "Hata: " . $e->getMessage();
+                // Log error instead of showing raw exception
+                if (function_exists('sp_log')) {
+                    sp_log("Register Error: " . $e->getMessage(), "register_error");
+                }
+                $error_message = function_exists('__') ? __('err_data') : "System Error";
             }
         }
         if (!empty($error_message) && empty($success_message)) {
@@ -93,12 +106,14 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 }
 ?>
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="<?= htmlspecialchars($settings['default_lang'] ?? 'tr') ?>">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kayıt Ol - <?= e($settings['site_name'] ?? 'SpeedPage') ?></title>
+    <title><?= function_exists('__') ? __('register_title') : 'Kayıt Ol' ?> -
+        <?= e($settings['site_name'] ?? 'SpeedPage') ?>
+    </title>
     <script>
         (function () {
             const savedTheme = localStorage.getItem('theme');
@@ -132,10 +147,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                         <span lang="register"></span>
                     </h3>
 
-                    <?php if ($error_message): ?>
+                    <?php if (!empty($error_message)): ?>
                         <div class="alert alert-danger py-2 text-center small"><?= $error_message ?></div>
                     <?php endif; ?>
-                    <?php if ($success_message): ?>
+                    <?php if (!empty($success_message)): ?>
                         <div class="alert alert-success py-2 text-center small"><?= $success_message ?></div>
                     <?php endif; ?>
 

@@ -1,14 +1,15 @@
 /* ============================
    ✅ DB PANELİ (veripanel)
-   dbpanel.js
-============================ */
+   dbpanel.js - Updated for Standardized API
+   ============================ */
 
 let tableName = "", columns = [];
 
 // Tabloları yükle
 function loadTables() {
-    $.getJSON("verislem.php?action=tables", t => {
-        const items = t.map(x => `<li class="list-group-item list-group-item-action" onclick="selectAndClose('${x}')">${x}</li>`).join('');
+    $.getJSON("verislem.php?action=tables", res => {
+        if (!res.ok) return;
+        const items = res.data.map(x => `<li class="list-group-item list-group-item-action" onclick="selectAndClose('${x}')">${x}</li>`).join('');
         document.querySelectorAll('.tables-list').forEach(el => el.innerHTML = items);
     });
 }
@@ -29,22 +30,25 @@ function loadTable(t) {
     $("#title").text(t);
 
     // Sütunları ve satırları koordineli yükle
-    $.getJSON("verislem.php?action=columns&table=" + t, c => {
-        columns = c;
+    $.getJSON("verislem.php?action=columns&table=" + t, colRes => {
+        if (!colRes.ok) return;
+        columns = colRes.data;
         const pkCol = columns.find(x => x.pk == 1)?.name || 'id';
 
-        $.getJSON("verislem.php?action=rows&table=" + t, rows => {
+        $.getJSON("verislem.php?action=rows&table=" + t, rowRes => {
+            if (!rowRes.ok) return;
+            const rows = rowRes.data;
+
             if (!rows || !rows.length) {
                 $("#content").html(window.lang?.no_data || 'Veri bulunamadı.');
                 return;
             }
 
-            // Header - rows[0] üzerinden değil, columns metadata üzerinden gitmek daha güvenli
+            // Header
             let th = columns.map(col => `<th>${col.name}</th>`).join("");
 
             let tr = rows.map(r => {
                 const rowIdValue = r[pkCol];
-                // ID değerini tırnak içine al (string ise sorun çıkmasın)
                 const quotedId = typeof rowIdValue === 'string' ? `'${rowIdValue}'` : rowIdValue;
 
                 let td = columns.map(col => {
@@ -84,10 +88,7 @@ function addForm() {
 
     let f = columns
         .filter(c => {
-            // Auto-increment olanları gizle
             if (c.extra && c.extra.toLowerCase().includes('auto_increment')) return false;
-            // SQLite için Integer PK ise ve boş bırakılacaksa gizlenebilir (opsiyonel)
-            // Ama genel kural: Manuel girilmesi gereken PK'ları göster.
             if (c.pk == 1 && c.type && c.type.toLowerCase().includes('int')) return false;
             return true;
         })
@@ -112,14 +113,24 @@ function addForm() {
 
 // Kayıt ekle
 function insert(btn) {
+    const card = $(btn).closest(".card");
     let data = {};
-    $(btn).parent().find("input").each(function () { data[this.name] = this.value });
+    card.find("input").each(function () { data[this.name] = this.value });
 
     fetch("verislem.php?action=insert", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ table: tableName, data: data, csrf: CSRF_TOKEN })
-    }).then(() => loadTable(tableName));
+    })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok) {
+                loadTable(tableName);
+            } else {
+                alert((window.lang?.errdata || 'Error: ') + (res.error || 'Unknown error'));
+            }
+        })
+        .catch(err => alert((window.lang?.errdata || 'Error: ') + err));
 }
 
 // Kayıt güncelle
@@ -142,14 +153,22 @@ function runSQL() {
     }
 
     $.post("verislem.php?action=sql", { sql: q, csrf: CSRF_TOKEN }, res => {
-        $("#sqlResult").text(JSON.stringify(res, null, 2));
+        if (res.ok) {
+            $("#sqlResult").text(JSON.stringify(res.data, null, 2));
+        } else {
+            $("#sqlResult").text("Error: " + res.error);
+        }
     }, "json");
 }
 
 // SQL export
 function exportSQL() {
     $.getJSON("verislem.php?action=export_sql", res => {
-        $("#sqlResult").text(res.sql);
+        if (res.ok) {
+            $("#sqlResult").text(res.data.sql);
+        } else {
+            $("#sqlResult").text("Error: " + res.error);
+        }
     });
 }
 

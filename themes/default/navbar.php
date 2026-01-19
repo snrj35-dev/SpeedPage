@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Default Theme Navbar
  */
@@ -14,17 +15,20 @@ $siteName = trim($settings['site_name'] ?? 'SpeedPage');
     <!-- Brand / Logo -->
     <a class="navbar-brand d-flex align-items-center text-decoration-none me-4" href="<?= BASE_URL ?>">
         <?php if ($logo): ?>
-            <img src="<?= htmlspecialchars($logo) ?>" alt="<?= htmlspecialchars($siteName) ?>"
-                style="height: 32px; object-fit: contain;" class="me-2">
+            <img src="<?= e($logo) ?>" alt="<?= e($siteName) ?>" style="height: 32px; object-fit: contain;" class="me-2">
         <?php endif; ?>
-        <span class="fw-bold h5 mb-0"><?= htmlspecialchars($siteName) ?></span>
+        <span class="fw-bold h5 mb-0"><?= e($siteName) ?></span>
     </a>
 
     <!-- Menüler (Desktop) -->
     <div class="d-none d-lg-flex align-items-center">
         <?php foreach ($menus as $m): ?>
             <?php
-            $url = $m['external_url'] ? $m['external_url'] : '?page=' . $m['slug'];
+            if ($m['external_url']) {
+                $url = $m['external_url'];
+            } else {
+                $url = ($settings['friendly_url'] === '1') ? (BASE_PATH . $m['slug']) : (BASE_URL . 'index.php?page=' . $m['slug']);
+            }
             ?>
             <a href="<?= htmlspecialchars($url) ?>" class="nav-link px-3 fw-medium">
                 <?php if (!empty($m['icon'])): ?>
@@ -95,11 +99,19 @@ $siteName = trim($settings['site_name'] ?? 'SpeedPage');
     </div>
     <div class="sidebar-body p-3">
         <?php foreach ($menus as $m): ?>
-            <?php $url = $m['external_url'] ? $m['external_url'] : '?page=' . $m['slug']; ?>
-            <a href="<?= htmlspecialchars($url) ?>" class="nav-link-mobile">
-                <i class="fa <?= !empty($m['icon']) ? htmlspecialchars($m['icon']) : 'fa-link' ?>"></i>
+            <?php
+            // Eğer harici bir link değilse, sistem ayarına göre link oluştur
+            if ($m['external_url']) {
+                $url = $m['external_url'];
+            } else {
+                // PHP tarafında da Friendly URL kontrolü
+                $url = ($settings['friendly_url'] === '1') ? (BASE_PATH . $m['slug']) : (BASE_URL . 'index.php?page=' . $m['slug']);
+            }
+            ?>
+            <a href="<?= e($url) ?>" class="nav-link-mobile">
+                <i class="fa <?= !empty($m['icon']) ? e($m['icon']) : 'fa-link' ?>"></i>
                 <span>
-                    <?= htmlspecialchars($m['title']) ?>
+                    <?= e($m['title']) ?>
                 </span>
             </a>
         <?php endforeach; ?>

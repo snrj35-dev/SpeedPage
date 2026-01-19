@@ -2,11 +2,11 @@ const LANG_KEY = 'user_language';
 
 // BASE_PATH PHP tarafından global tanımlı olabilir; değilse fallback kullan
 let BASE_JSON_PATH;
-if (typeof BASE_PATH !== 'undefined') { 
-    BASE_JSON_PATH = BASE_PATH + 'cdn/lang/'; 
-}    
-else { 
-    BASE_JSON_PATH = BASE_URL + 'cdn/lang/'; 
+if (typeof BASE_PATH !== 'undefined') {
+    BASE_JSON_PATH = BASE_PATH + 'cdn/lang/';
+}
+else {
+    BASE_JSON_PATH = BASE_URL + 'cdn/lang/';
 }
 
 // Path normalize
@@ -15,8 +15,7 @@ if (!BASE_JSON_PATH.endsWith('/')) {
 }
 
 // Varsayılan dil
-let currentLang = localStorage.getItem(LANG_KEY) || 'tr';
-
+let currentLang = localStorage.getItem(LANG_KEY) || (typeof DEFAULT_SITE_LANG !== 'undefined' ? DEFAULT_SITE_LANG : 'tr');
 // Dil seçici
 const langSelect = document.getElementById('lang-select');
 
@@ -73,10 +72,14 @@ async function setLanguage(lang) {
 
     const translations = await loadTranslation(lang);
 
-    // ✅ global değişken
+    // ✅ Global değişken
     window.lang = translations;
 
+    // ✅ İçeriği çevir
     updateContent(translations);
+
+    // ✅ HTML 'lang' niteliğini güncelle (SEO ve Erişilebilirlik için)
+    document.documentElement.lang = lang;
 
     if (langSelect) {
         langSelect.value = lang;

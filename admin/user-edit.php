@@ -1,81 +1,110 @@
 <?php
+declare(strict_types=1);
+
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/db.php';
 
+/** @var PDO $db */
+global $db;
+
+// Ensure standard JSON response
 header('Content-Type: application/json; charset=utf-8');
 
-$method = $_SERVER['REQUEST_METHOD'];
+try {
+    $method = $_SERVER['REQUEST_METHOD'];
+    // $userId'yi almaya gerek yok, sp_log session'dan okur.
 
-if ($method === 'GET') {
-    // GET /admin/user-edit.php?id=...
-    $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
-    if ($id) {
-        $stmt = $db->prepare("SELECT id, username, role, is_active, created_at FROM users WHERE id=?");
-        $stmt->execute([$id]);
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        if ($row)
-            echo json_encode(['ok' => true, 'user' => $row]);
-        else
-            echo json_encode(['ok' => false, 'error' => 'NOT_FOUND', 'message_key' => 'user_not_found']);
-        exit;
-    }
+    // --- GET Request: Fetch User List or Single User ---
+    if ($method === 'GET') {
+        $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 
-    // List users
-    $rows = $db->query("SELECT id, username, role, is_active, created_at FROM users ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
-    echo json_encode(['ok' => true, 'users' => $rows]);
-    exit;
-}
+        if ($id) {
+            $stmt = $db->prepare("SELECT id, username, role, is_active, created_at FROM users WHERE id=?");
+            $stmt->execute([$id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if ($method === 'POST') {
-    if (!isset($_POST['csrf']) || $_POST['csrf'] !== $_SESSION['csrf']) {
-        echo json_encode(['ok' => false, 'error' => 'CSRF verification failed']);
-        exit;
-    }
-    $action = $_POST['action'] ?? 'create';
-
-    if ($action === 'create') {
-        $username = trim($_POST['username'] ?? '');
-        $password = $_POST['password'] ?? '';
-        // Only admin may assign role; otherwise default to 'user'
-        $role = (!empty($is_admin) && $is_admin) ? ($_POST['role'] ?? 'user') : 'user';
-        $is_active = isset($_POST['is_active']) ? (int) $_POST['is_active'] : 1;
-
-        if (!$username || !$password) {
-            echo json_encode(['ok' => false, 'error' => 'MISSING', 'message_key' => 'fill_all_fields']);
+            if ($row) {
+                echo json_encode(['ok' => true, 'user' => $row], JSON_THROW_ON_ERROR);
+            } else {
+                echo json_encode(['ok' => false, 'error' => 'NOT_FOUND', 'message_key' => 'user_not_found'], JSON_THROW_ON_ERROR);
+            }
             exit;
         }
 
-        try {
+        // List all users
+        $rows = $db->query("SELECT id, username, role, is_active, created_at FROM users ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+        echo json_encode(['ok' => true, 'users' => $rows], JSON_THROW_ON_ERROR);
+        exit;
+    }
+
+    // --- POST Request: Create / Update / Delete ---
+    if ($method === 'POST') {
+        $csrf = filter_input(INPUT_POST, 'csrf', FILTER_SANITIZE_SPECIAL_CHARS);
+        if (!$csrf || $csrf !== $_SESSION['csrf']) {
+            echo json_encode(['ok' => false, 'error' => 'CSRF verification failed', 'message_key' => 'csrf_error'], JSON_THROW_ON_ERROR);
+            exit;
+        }
+
+        $action = filter_input(INPUT_POST, 'action', FILTER_SANITIZE_SPECIAL_CHARS) ?? 'create';
+
+        // 1. CREATE USER
+        if ($action === 'create') {
+            $username = trim(filter_input(INPUT_POST, 'username', FILTER_SANITIZE_SPECIAL_CHARS) ?? '');
+            $password = $_POST['password'] ?? '';
+
+            $role = 'user';
+            if (!empty($is_admin) && $is_admin) {
+                $roleInput = filter_input(INPUT_POST, 'role', FILTER_SANITIZE_SPECIAL_CHARS);
+                if ($roleInput)
+                    $role = $roleInput;
+            }
+
+            $is_active = filter_input(INPUT_POST, 'is_active', FILTER_VALIDATE_INT) ?? 1;
+
+            if (!$username || !$password) {
+                echo json_encode(['ok' => false, 'error' => 'MISSING', 'message_key' => 'fill_all_fields'], JSON_THROW_ON_ERROR);
+                exit;
+            }
+
+            // Check if username already exists
+            $stmt = $db->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
+            $stmt->execute([$username]);
+            if ($stmt->fetchColumn() > 0) {
+                echo json_encode(['ok' => false, 'error' => 'EXISTS', 'message_key' => 'username_taken'], JSON_THROW_ON_ERROR);
+                exit;
+            }
+
             $hash = password_hash($password, PASSWORD_BCRYPT);
             $stmt = $db->prepare("INSERT INTO users (username, password_hash, role, is_active) VALUES (?,?,?,?)");
             $stmt->execute([$username, $hash, $role, $is_active]);
-            echo json_encode(['ok' => true]);
-        } catch (Exception $e) {
-            echo json_encode(['ok' => false, 'error' => $e->getMessage(), 'message_key' => 'errdata']);
-        }
-        exit;
-    }
 
-    if ($action === 'update') {
-        $id = (int) ($_POST['id'] ?? 0);
-        $username = trim($_POST['username'] ?? '');
-        $password = $_POST['password'] ?? null;
-        // Only admin may change role; otherwise preserve existing role
-        $posted_role = $_POST['role'] ?? null;
-        $is_active = isset($_POST['is_active']) ? (int) $_POST['is_active'] : 1;
+            if (function_exists('sp_log')) {
+                sp_log("Yeni kullanıcı eklendi: $username ($role)", 'user_add');
+            }
 
-        if (!$id || !$username) {
-            echo json_encode(['ok' => false, 'error' => 'MISSING', 'message_key' => 'fill_all_fields']);
+            echo json_encode(['ok' => true], JSON_THROW_ON_ERROR);
             exit;
         }
 
-        try {
+        // 2. UPDATE USER
+        if ($action === 'update') {
+            $id = filter_input(INPUT_POST, 'id', FILTER_VALIDATE_INT);
+            $username = trim(filter_input(INPUT_POST, 'username', FILTER_SANITIZE_SPECIAL_CHARS) ?? '');
+            $password = $_POST['password'] ?? null;
+            $roleInput = filter_input(INPUT_POST, 'role', FILTER_SANITIZE_SPECIAL_CHARS);
+            $is_active = filter_input(INPUT_POST, 'is_active', FILTER_VALIDATE_INT) ?? 1;
+
+            if (!$id || !$username) {
+                echo json_encode(['ok' => false, 'error' => 'MISSING', 'message_key' => 'fill_all_fields'], JSON_THROW_ON_ERROR);
+                exit;
+            }
+
+            // Determine role to set
+            $roleToSet = 'user';
             if (!empty($is_admin) && $is_admin) {
-                // admin can set role
-                $roleToSet = $posted_role ?? 'user';
+                $roleToSet = $roleInput ?? 'user';
             } else {
-                // keep existing role
                 $stmt = $db->prepare("SELECT role FROM users WHERE id=?");
                 $stmt->execute([$id]);
                 $roleRow = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -90,31 +119,45 @@ if ($method === 'POST') {
                 $db->prepare("UPDATE users SET username=?, role=?, is_active=? WHERE id=?")
                     ->execute([$username, $roleToSet, $is_active, $id]);
             }
-            echo json_encode(['ok' => true]);
-        } catch (Exception $e) {
-            echo json_encode(['ok' => false, 'error' => $e->getMessage(), 'message_key' => 'errdata']);
-        }
-        exit;
-    }
 
-    if ($action === 'delete') {
-        $id = (int) ($_POST['id'] ?? 0);
-        if (!$id) {
-            echo json_encode(['ok' => false, 'error' => 'MISSING', 'message_key' => 'data_missing']);
+            if (function_exists('sp_log')) {
+                sp_log("Kullanıcı güncellendi: $username (ID: $id)", 'user_update');
+            }
+
+            echo json_encode(['ok' => true], JSON_THROW_ON_ERROR);
             exit;
         }
-        if ($id === 1) {
-            echo json_encode(['ok' => false, 'error' => 'MAIN_ADMIN', 'message_key' => 'main_admin_cannot_be_deleted']);
-            exit;
-        }
-        try {
+
+        // 3. DELETE USER
+        if ($action === 'delete') {
+            $id = filter_input(INPUT_POST, 'id', FILTER_VALIDATE_INT);
+
+            if (!$id) {
+                echo json_encode(['ok' => false, 'error' => 'MISSING', 'message_key' => 'data_missing'], JSON_THROW_ON_ERROR);
+                exit;
+            }
+            if ($id === 1) {
+                echo json_encode(['ok' => false, 'error' => 'MAIN_ADMIN', 'message_key' => 'main_admin_cannot_be_deleted'], JSON_THROW_ON_ERROR);
+                exit;
+            }
+
+            $stmt = $db->prepare("SELECT username FROM users WHERE id=?");
+            $stmt->execute([$id]);
+            $uName = $stmt->fetchColumn() ?: 'Unknown';
+
             $db->prepare("DELETE FROM users WHERE id=?")->execute([$id]);
-            echo json_encode(['ok' => true]);
-        } catch (Exception $e) {
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
-    }
-}
 
-echo json_encode(['ok' => false, 'error' => 'INVALID']);
+            if (function_exists('sp_log')) {
+                sp_log("Kullanıcı silindi: $uName (ID: $id)", 'user_delete');
+            }
+
+            echo json_encode(['ok' => true], JSON_THROW_ON_ERROR);
+            exit;
+        }
+    }
+
+    echo json_encode(['ok' => false, 'error' => 'INVALID_METHOD', 'message_key' => 'invalid_request'], JSON_THROW_ON_ERROR);
+
+} catch (Exception $e) {
+    echo json_encode(['ok' => false, 'error' => $e->getMessage(), 'message_key' => 'errdata'], JSON_THROW_ON_ERROR);
+}

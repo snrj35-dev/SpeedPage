@@ -1,7 +1,11 @@
 <?php
+declare(strict_types=1);
+
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/db.php';
+/** @var PDO $db */
+global $db;
 
 // ✅ Fetch Global Settings
 $stSet = $db->query("SELECT `key`, `value` FROM settings");
@@ -14,12 +18,12 @@ if (!defined('ACTIVE_THEME')) {
 
     // Optional: Admin might want to see the site in their preferred theme too? 
     // The user asked for "Sabit Tanımı Kontrolü" in both, so let's apply it.
-    if (isset($settings['allow_user_theme']) && $settings['allow_user_theme'] == '1' && !empty($_SESSION['user_id'])) {
+    if (isset($settings['allow_user_theme']) && $settings['allow_user_theme'] === '1' && !empty($_SESSION['user_id'])) {
         $stmt = $db->prepare("SELECT preferred_theme FROM users WHERE id = ?");
         $stmt->execute([$_SESSION['user_id']]);
         $pref = $stmt->fetchColumn();
         if ($pref) {
-            $finalTheme = $pref;
+            $finalTheme = (string) $pref;
         }
     }
     define('ACTIVE_THEME', $finalTheme);
@@ -27,14 +31,23 @@ if (!defined('ACTIVE_THEME')) {
 // Kullanıcı bilgisi
 $userQuery = $db->prepare("SELECT display_name, username, avatar_url FROM users WHERE id = ?");
 $userQuery->execute([$_SESSION['user_id']]);
-$currentUser = $userQuery->fetch();
+$currentUser = $userQuery->fetch(PDO::FETCH_ASSOC);
 
 $finalName = $currentUser['display_name'] ?: ($currentUser['username'] ?: 'Kullanıcı');
 $finalAvatar = $currentUser['avatar_url'] ?: 'fa-user';
 
 // Hangi sayfa?
-$default_page = $is_admin ? 'settings' : 'pages';
-$page = $_GET['page'] ?? $default_page;
+// Sanitized Input
+$page = filter_input(INPUT_GET, 'page', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+
+if (isset($is_admin)) {
+    // $is_admin comes from auth.php
+    $default_page = $is_admin ? 'settings' : 'pages';
+} else {
+    $default_page = 'pages'; // Fallback
+}
+$page = $page ?? $default_page;
+
 if ($page === 'browser') {
     require_once __DIR__ . '/browser-islem.php';
 }
@@ -54,8 +67,26 @@ $globalJs = [
 // Sayfa bazlı CSS/JS
 $pageAssets = [
     'settings' => ['css' => [], 'js' => []],
-    'pages' => ['css' => [CDN_URL . "css/pages.css"], 'js' => [CDN_URL . "js/pages.js"]],
-    'menu' => ['css' => [], 'js' => [CDN_URL . "js/menu.js"]],
+    'pages' => [
+        'css' => [
+            CDN_URL . "css/pages.css",
+            CDN_URL . "css/codemirror.min.css",
+            CDN_URL . "css/dracula.min.css"
+        ],
+        'js' => [
+            CDN_URL . "js/codemirror/codemirror.min.js",
+            CDN_URL . "js/codemirror/mode/xml.min.js",
+            CDN_URL . "js/codemirror/mode/javascript.min.js",
+            CDN_URL . "js/codemirror/mode/css.min.js",
+            CDN_URL . "js/codemirror/mode/htmlmixed.min.js",
+            CDN_URL . "js/codemirror/mode/clike.min.js",
+            CDN_URL . "js/codemirror/mode/php.min.js",
+            CDN_URL . "js/highlight.min.js",
+            CDN_URL . "js/pages.js",
+            CDN_URL . "js/browser.js"
+        ]
+    ],
+    // 'menu' routu kaldırıldı, Pages ile birleşti.
     'modules' => ['css' => [], 'js' => [CDN_URL . "js/modules.js"]],
     'users' => ['css' => [], 'js' => [CDN_URL . "js/user.js"]],
     'dbpanel' => ['css' => [], 'js' => [CDN_URL . "js/dbpanel.js"]],
@@ -78,7 +109,7 @@ $pageAssets = [
 $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
 ?>
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="<?= htmlspecialchars($settings['default_lang'] ?? 'tr') ?>">
 
 <head>
     <meta charset="UTF-8">
@@ -92,6 +123,7 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
                 document.documentElement.setAttribute('data-theme', 'dark');
             }
         })();
+        const DEFAULT_SITE_LANG = "<?= htmlspecialchars($settings['default_lang'] ?? 'tr') ?>";
         const BASE_PATH = '<?= e(BASE_PATH) ?>';
         const CSRF_TOKEN = '<?= e($_SESSION['csrf']) ?>';
     </script>
@@ -134,19 +166,17 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
 
 
     <!-- Menü -->
-    <div class="admin-nav-container border-bottom sticky-top shadow-sm" style="top: 71px; z-index: 1020;">
+    <div class="admin-nav-container border-bottom sticky-top shadow-sm" style="top:0px; z-index: 1020;">
         <nav class="nav admin-nav-scroll px-3">
-            <?php if ($is_admin): ?>
+            <?php if (isset($is_admin) && $is_admin): ?>
                 <a href="index.php?page=settings" class="nav-link <?= $page === 'settings' ? 'active' : '' ?>">
                     <i class="fas fa-cog"></i> <span lang="settings"></span>
                 </a>
             <?php endif; ?>
             <a href="index.php?page=pages" class="nav-link <?= $page === 'pages' ? 'active' : '' ?>">
-                <i class="fas fa-file"></i> <span lang="pages"></span>
+                <i class="fas fa-file"></i> <span lang="pages"></span> / <span lang="menu_management"></span>
             </a>
-            <a href="index.php?page=menu" class="nav-link <?= $page === 'menu' ? 'active' : '' ?>">
-                <i class="fas fa-bars"></i> <span lang="menu_management"></span>
-            </a>
+            <!-- Menu Management merged into Pages -->
             <a href="index.php?page=modules" class="nav-link <?= $page === 'modules' ? 'active' : '' ?>">
                 <i class="fas fa-puzzle-piece"></i> <span lang="modules"></span>
             </a>
@@ -161,14 +191,17 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
                 <a href="index.php?page=aipanel" class="nav-link <?= $page === 'aipanel' ? 'active' : '' ?>">
                     <i class="fas fa-robot"></i> <span lang="ai_panel">AI Panel</span>
                 </a>
-                <a href="index.php?page=dbpanel" class="nav-link <?= $page === 'dbpanel' ? 'active' : '' ?>">
-                    <i class="fas fa-database"></i> <span lang="database"></span>
-                </a>
                 <a href="index.php?page=browser" class="nav-link <?= $page === 'browser' ? 'active' : '' ?>">
                     <i class="fas fa-folder-open"></i> <span lang="filebrowser"></span>
                 </a>
                 <a href="index.php?page=system" class="nav-link <?= $page === 'system' ? 'active' : '' ?>">
                     <i class="fas fa-microchip"></i> <span lang="system"></span>
+                </a>
+                <a href="index.php?page=dbpanel" class="nav-link <?= $page === 'dbpanel' ? 'active' : '' ?>">
+                    <i class="fas fa-database"></i> <span lang="database"></span>
+                </a>
+                <a href="index.php?page=migration" class="nav-link <?= $page === 'migration' ? 'active' : '' ?>">
+                    <i class="fas fa-exchange-alt"></i> <span lang="migration_tool">Migration</span>
                 </a>
             <?php endif; ?>
         </nav>
@@ -179,7 +212,7 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
         <?php
         switch ($page) {
             case 'settings':
-                if ($is_admin)
+                if (isset($is_admin) && $is_admin)
                     require __DIR__ . "/settings-panel.php";
                 else
                     echo "<div class='alert alert-danger'>Yetkisiz erişim.</div>";
@@ -187,9 +220,7 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
             case 'pages':
                 require __DIR__ . "/page-panel.php";
                 break;
-            case 'menu':
-                require __DIR__ . "/menu-panel.php";
-                break;
+            // case 'menu': removed (merged)
             case 'modules':
                 require __DIR__ . "/modules-panel.php";
                 break;
@@ -203,10 +234,6 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
                 if (!empty($is_admin) && $is_admin)
                     require __DIR__ . "/user-panel.php";
                 break;
-            case 'dbpanel':
-                if (!empty($is_admin) && $is_admin)
-                    require __DIR__ . "/veripanel-content.php";
-                break;
             case 'browser':
                 if (!empty($is_admin) && $is_admin)
                     require __DIR__ . "/browser-panel.php";
@@ -214,6 +241,10 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
             case 'system':
                 if (!empty($is_admin) && $is_admin)
                     require __DIR__ . "/system-panel.php";
+                break;
+            case 'dbpanel':
+                if (!empty($is_admin) && $is_admin)
+                    require __DIR__ . "/veripanel-content.php";
                 break;
             case 'migration':
                 if (!empty($is_admin) && $is_admin)
@@ -243,6 +274,8 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
         <script src="<?= $js ?>"></script>
     <?php endforeach; ?>
     <script src="<?= CDN_URL ?>js/lang.js"></script>
+    <?php if (function_exists('run_hook'))
+        run_hook('footer_end'); ?>
 </body>
 
 </html>

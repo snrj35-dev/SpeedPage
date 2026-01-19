@@ -1,387 +1,330 @@
 <?php
+declare(strict_types=1);
+
+/**
+ * SpeedPage Admin Data Operations (verislem.php)
+ * Stabilized for PHP 8.3 | CSRF Protected | Standardized JSON API
+ */
+
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/db.php';
 
-// Disable error output (JSON format bozulmasın)
-ini_set('display_errors', 0);
-error_reporting(0);
+/** @var PDO $db */
+global $db;
 
+// Standard JSON Header
 header("Content-Type: application/json; charset=utf-8");
 
-// Read JSON body
-$raw = file_get_contents("php://input");
-$input = json_decode($raw, true);
-if (is_array($input)) {
-    $_POST = array_merge($_POST, $input);
+// Response Template
+$response = [
+    "ok" => false,
+    "error" => "",
+    "data" => []
+];
+
+try {
+    // 1. Input Processing
+    $rawInput = file_get_contents("php://input");
+    $jsonData = json_decode($rawInput, true);
+    if (is_array($jsonData)) {
+        $_POST = array_merge($_POST, $jsonData);
+    }
+
+    $action = (string) filter_input(INPUT_GET, 'action', FILTER_SANITIZE_SPECIAL_CHARS);
+    $isPost = ($_SERVER['REQUEST_METHOD'] === 'POST');
+
+    // 2. Strict CSRF Validation for all POST operations
+    if ($isPost) {
+        $token = $_POST['csrf'] ?? '';
+        if (!$token || $token !== ($_SESSION['csrf'] ?? '')) {
+            throw new Exception("CSRF_VERIFICATION_FAILED");
+        }
+    }
+
+    // 3. Admin Permissions Check (for specific actions if needed)
+    $is_admin = (isset($_SESSION['role']) && $_SESSION['role'] === 'admin');
+
+    // 4. Action Routing using PHP 8.0 match expression
+    if ($action === 'export_sql_file') {
+        $dump = generate_agnostic_dump($db);
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="backup.sql"');
+        echo $dump;
+        exit;
+    }
+
+    $result = match ($action) {
+        'tables' => handleListTables($db),
+        'columns' => handleListColumns($db),
+        'rows' => handleListRows($db),
+        'insert' => handleInsert($db),
+        'update' => handleUpdate($db),
+        'delete' => handleDelete($db),
+        'sql' => handleSqlExec($db, $is_admin),
+        'export_sql' => handleExportSql($db),
+        'import_sql' => handleImportSql($db, $is_admin),
+        'import_file' => handleImportFile($db, $is_admin),
+        default => throw new Exception("INVALID_ACTION")
+    };
+
+    $response["ok"] = true;
+    $response["data"] = $result;
+
+} catch (Throwable $e) {
+    $response["ok"] = false;
+    $response["error"] = $e->getMessage();
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' || !empty($_POST)) {
-    // Some logic might use GET action with POST data. 
-    // Generally check if we have any POST data or if input indicates POST intent.
-    // verislem.php seems to purely rely on action param from GET often, but Data in POST.
-    // Let's enforce CSRF if there is POST data.
+echo json_encode($response);
+exit;
 
-    // Note: 'rows' action is GET, 'tables' is GET. 'insert', 'update', 'delete' use POST data.
-    if (in_array($_GET["action"] ?? "", ["insert", "update", "delete", "sql", "import_sql", "import_file"])) {
-        if (!isset($_POST['csrf']) || $_POST['csrf'] !== $_SESSION['csrf']) {
-            echo json_encode(["ok" => false, "error" => "CSRF verification failed"]);
-            exit;
-        }
+/* ======================================================
+   HANDLER FUNCTIONS
+   ====================================================== */
+
+function handleListTables(PDO $db): array
+{
+    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+    return match ($driver) {
+        'sqlite' => $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")->fetchAll(PDO::FETCH_COLUMN),
+        'mysql' => $db->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN),
+        default => []
+    };
+}
+
+function handleListColumns(PDO $db): array
+{
+    $table = preg_replace("/[^a-zA-Z0-9_]/", "", $_GET["table"] ?? "");
+    if (!$table)
+        return [];
+
+    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+    if ($driver === 'sqlite') {
+        return $db->query("PRAGMA table_info(`$table`)")->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $cols = $db->query("DESCRIBE `$table`")->fetchAll(PDO::FETCH_ASSOC);
+        return array_map(fn($c) => [
+            'name' => $c['Field'],
+            'type' => $c['Type'],
+            'notnull' => ($c['Null'] === 'NO' ? 1 : 0),
+            'dflt_value' => $c['Default'],
+            'pk' => ($c['Key'] === 'PRI' ? 1 : 0),
+            'extra' => $c['Extra']
+        ], $cols);
     }
 }
 
-$action = $_GET["action"] ?? "";
-
-// Determine if current user is admin (auth.php sets session role)
-$is_admin = (isset($_SESSION['role']) && $_SESSION['role'] === 'admin');
-
-// Sanitize table name
-function clean_table($t)
+function handleListRows(PDO $db): array
 {
-    return preg_replace("/[^a-zA-Z0-9_]/", "", $t);
+    $table = preg_replace("/[^a-zA-Z0-9_]/", "", $_GET["table"] ?? "");
+    if (!$table)
+        return [];
+
+    $stmt = $db->prepare("SELECT * FROM `$table` LIMIT 200");
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
-function get_primary_key($db, $table)
+function handleInsert(PDO $db): bool
 {
+    $table = preg_replace("/[^a-zA-Z0-9_]/", "", $_POST["table"] ?? "");
+    $data = $_POST["data"] ?? [];
+    if (!$table || !is_array($data))
+        throw new Exception("REQUIRED_PARAMS_MISSING");
+
+    // Auto-increment stripping logic
     $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
     if ($driver === 'sqlite') {
         $cols = $db->query("PRAGMA table_info(`$table`)")->fetchAll(PDO::FETCH_ASSOC);
         foreach ($cols as $c) {
-            if ($c['pk'])
-                return $c['name'];
+            if ($c['pk'] && stripos($c['type'], 'INT') !== false && empty($data[$c['name']])) {
+                unset($data[$c['name']]);
+            }
         }
     } else {
         $cols = $db->query("DESCRIBE `$table`")->fetchAll(PDO::FETCH_ASSOC);
         foreach ($cols as $c) {
-            if ($c['Key'] === 'PRI')
-                return $c['Field'];
-        }
-    }
-    return 'id'; // Fallback
-}
-
-/* ---------------- TABLE LIST ---------------- */
-if ($action === "tables") {
-    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
-    if ($driver === 'sqlite') {
-        echo json_encode(
-            $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-                ->fetchAll(PDO::FETCH_COLUMN)
-        );
-    } else {
-        echo json_encode(
-            $db->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN)
-        );
-    }
-    exit;
-}
-
-/* ---------------- COLUMN LIST ---------------- */
-if ($action === "columns") {
-    $t = clean_table($_GET["table"] ?? "");
-    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
-    if ($driver === 'sqlite') {
-        echo json_encode(
-            $db->query("PRAGMA table_info(`$t`)")->fetchAll(PDO::FETCH_ASSOC)
-        );
-    } else {
-        // Map MySQL DESCRIBE to SQLite PRAGMA table_info format for frontend compatibility
-        $cols = $db->query("DESCRIBE `$t`")->fetchAll(PDO::FETCH_ASSOC);
-        $mapped = array_map(function ($c) {
-            return [
-                'name' => $c['Field'],
-                'type' => $c['Type'],
-                'notnull' => ($c['Null'] === 'NO' ? 1 : 0),
-                'dflt_value' => $c['Default'],
-                'pk' => ($c['Key'] === 'PRI' ? 1 : 0),
-                'extra' => $c['Extra'] // e.g. auto_increment
-            ];
-        }, $cols);
-        echo json_encode($mapped);
-    }
-    exit;
-}
-
-/* ---------------- ROW LIST ---------------- */
-if ($action === "rows") {
-    $t = clean_table($_GET["table"] ?? "");
-    echo json_encode(
-        $db->query("SELECT * FROM `$t` LIMIT 200")->fetchAll(PDO::FETCH_ASSOC)
-    );
-    exit;
-}
-
-/* ---------------- INSERT ---------------- */
-if ($action === "insert") {
-    $t = clean_table($_POST["table"] ?? "");
-
-    if (!isset($_POST["data"]) || !is_array($_POST["data"])) {
-        echo json_encode(["ok" => false, "error" => "DATA_MISSING", "message_key" => "data_missing"]);
-        exit;
-    }
-
-    $data = $_POST["data"];
-
-    // Detect PK and Auto-Increment
-    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
-    if ($driver === 'sqlite') {
-        $cols = $db->query("PRAGMA table_info(`$t`)")->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($cols as $c) {
-            // Integer PK in SQLite is typically auto-increment if not provided
-            if ($c['pk'] && stripos($c['type'], 'INT') !== false) {
-                if (empty($data[$c['name']]))
-                    unset($data[$c['name']]);
-            }
-        }
-    } else {
-        $cols = $db->query("DESCRIBE `$t`")->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($cols as $c) {
-            if (stripos($c['Extra'], 'auto_increment') !== false) {
+            if (stripos($c['Extra'] ?? '', 'auto_increment') !== false) {
                 unset($data[$c['Field']]);
             }
         }
     }
 
-    // Falls back to legacy 'id' unset just in case
-    unset($data["id"]);
-
-    // Auto hash password
-    if ($t === "users" && isset($data["password_hash"])) {
-        $data["password_hash"] = password_hash($data["password_hash"], PASSWORD_BCRYPT);
+    if ($table === "users" && isset($data["password_hash"])) {
+        $data["password_hash"] = password_hash((string) $data["password_hash"], PASSWORD_BCRYPT);
     }
 
-    $cols = array_keys($data);
-    $vals = array_values($data);
+    $colNames = implode(",", array_map(fn($k) => "`$k`", array_keys($data)));
+    $placeholders = implode(",", array_fill(0, count($data), "?"));
+    $stmt = $db->prepare("INSERT INTO `$table` ($colNames) VALUES ($placeholders)");
+    $stmt->execute(array_values($data));
 
-    $sql = "INSERT INTO `$t` (" . implode(",", $cols) . ")
-            VALUES (" . implode(",", array_fill(0, count($cols), "?")) . ")";
-
-    $db->prepare($sql)->execute($vals);
-
-    echo json_encode(["ok" => true]);
-    exit;
+    if (function_exists('sp_log'))
+        sp_log("DB Insert: $table", "db_insert");
+    return true;
 }
 
-/* ---------------- UPDATE ---------------- */
-if ($action === "update") {
-    $t = clean_table($_POST["table"] ?? "");
-    $id = $_POST["id"] ?? ""; // Could be string key
-    $col = clean_table($_POST["col"] ?? "");
+function handleUpdate(PDO $db): bool
+{
+    $table = preg_replace("/[^a-zA-Z0-9_]/", "", $_POST["table"] ?? "");
+    $id = $_POST["id"] ?? "";
+    $col = preg_replace("/[^a-zA-Z0-9_]/", "", $_POST["col"] ?? "");
     $val = $_POST["val"] ?? "";
 
-    if ($t === "users" && $col === "password_hash") {
-        $val = password_hash($val, PASSWORD_BCRYPT);
+    if (!$table || !$id || !$col)
+        throw new Exception("REQUIRED_PARAMS_MISSING");
+
+    if ($table === "users" && $col === "password_hash") {
+        $val = password_hash((string) $val, PASSWORD_BCRYPT);
     }
 
-    $pk = get_primary_key($db, $t);
+    $pk = get_primary_key_agnostic($db, $table);
+    $stmt = $db->prepare("UPDATE `$table` SET `$col`=? WHERE `$pk`=?");
+    $stmt->execute([$val, $id]);
 
-    $db->prepare("UPDATE `$t` SET `$col`=? WHERE `$pk`=?")
-        ->execute([$val, $id]);
-
-    echo json_encode(["ok" => true]);
-    exit;
+    if (function_exists('sp_log'))
+        sp_log("DB Update: $table ($id)", "db_update");
+    return true;
 }
 
-/* ---------------- DELETE ---------------- */
-if ($action === "delete") {
-    $t = clean_table($_POST["table"] ?? "");
+function handleDelete(PDO $db): bool
+{
+    $table = preg_replace("/[^a-zA-Z0-9_]/", "", $_POST["table"] ?? "");
     $id = $_POST["id"] ?? "";
+    if (!$table || !$id)
+        throw new Exception("REQUIRED_PARAMS_MISSING");
 
-    $pk = get_primary_key($db, $t);
+    $pk = get_primary_key_agnostic($db, $table);
+    if ($table === "users" && (int) $id === 1)
+        throw new Exception("CANNOT_DELETE_MAIN_ADMIN");
 
-    // Prevent deleting main admin
-    if ($t === "users" && ($pk === "id" && $id == 1)) {
-        echo json_encode(["ok" => false, "error" => "MAIN_ADMIN_CANNOT_BE_DELETED"]);
-        exit;
-    }
+    $stmt = $db->prepare("DELETE FROM `$table` WHERE `$pk`=?");
+    $stmt->execute([$id]);
 
-    $db->prepare("DELETE FROM `$t` WHERE `$pk`=?")->execute([$id]);
-
-    echo json_encode(["ok" => true]);
-    exit;
+    if (function_exists('sp_log'))
+        sp_log("DB Delete: $table ($id)", "db_delete");
+    return true;
 }
 
-/* ---------------- RUN SQL ---------------- */
-if ($action === "sql") {
-    try {
-        $sql = trim($_POST["sql"] ?? "");
-        if (!$sql) {
-            echo json_encode(["error" => "SQL_EMPTY"]);
-            exit;
-        }
+function handleSqlExec(PDO $db, bool $is_admin): array
+{
+    $sql = trim($_POST["sql"] ?? "");
+    if (!$sql)
+        throw new Exception("SQL_EMPTY");
 
-        $lower = ltrim(strtolower($sql));
+    $isSelect = preg_match('/^(select|show|describe|pragma|with)\b/i', $sql);
+    if (!$is_admin && !$isSelect)
+        throw new Exception("UNAUTHORIZED_SQL_EXECUTION");
 
-        // SELECT veya WITH sorguları için veri döndür
-        if (preg_match('/^(select|with)\b/', $lower)) {
-            $res = $db->query($sql)->fetchAll(PDO::FETCH_ASSOC);
-            echo json_encode(["type" => "select", "data" => $res]);
-        } else {
-            // Admin isen DROP, ALTER, TRUNCATE dahil her şeyi çalıştırabilmelisin
-            // Filtreyi tamamen kaldırıyoruz veya genişletiyoruz
-            $db->exec($sql);
-            echo json_encode(["type" => "exec", "ok" => true]);
-        }
-    } catch (Exception $e) {
-        echo json_encode(["error" => $e->getMessage()]);
-    }
-    exit;
-}
-
-/* ---------------- EXPORT SQL ---------------- */
-if ($action === "export_sql") {
-    $dump = "";
-    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
-
-    if ($driver === 'sqlite') {
-        $tables = $db->query("SELECT name FROM sqlite_master WHERE type='table'")
-            ->fetchAll(PDO::FETCH_COLUMN);
-
-        foreach ($tables as $t) {
-            $row = $db->query("SELECT sql FROM sqlite_master WHERE name='$t'")
-                ->fetch(PDO::FETCH_ASSOC);
-
-            if (!empty($row["sql"])) {
-                $dump .= $row["sql"] . ";\n\n";
-            }
-
-            $rows = $db->query("SELECT * FROM `$t`")->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($rows as $r) {
-                $dump .= "INSERT INTO `$t` VALUES (";
-                $dump .= implode(",", array_map(fn($v) => $v === null ? "NULL" : "'" . str_replace("'", "''", $v) . "'", array_values($r)));
-                $dump .= ");\n";
-            }
-            $dump .= "\n";
-        }
+    if ($isSelect) {
+        return ["type" => "select", "data" => $db->query($sql)->fetchAll(PDO::FETCH_ASSOC)];
     } else {
-        // Basic MySQL Export
-        $tables = $db->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
-        foreach ($tables as $t) {
-            $create = $db->query("SHOW CREATE TABLE `$t`")->fetch(PDO::FETCH_ASSOC);
-            $dump .= $create['Create Table'] . ";\n\n";
-
-            $rows = $db->query("SELECT * FROM `$t`")->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($rows as $r) {
-                $dump .= "INSERT INTO `$t` VALUES (";
-                $dump .= implode(",", array_map(fn($v) => $v === null ? "NULL" : "'" . str_replace("'", "\'", $v) . "'", array_values($r)));
-                $dump .= ");\n";
-            }
-            $dump .= "\n";
-        }
+        $affected = $db->exec($sql);
+        if (function_exists('sp_log'))
+            sp_log("Manual SQL Executed", "db_sql_exec", null, $sql);
+        return ["type" => "exec", "affected" => $affected];
     }
-
-    echo json_encode(["sql" => $dump]);
-    exit;
 }
 
-/* ---------------- EXPORT SQL AS FILE ---------------- */
-if ($action === "export_sql_file") {
-    $dump = "";
-    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
-
-    if ($driver === 'sqlite') {
-        $tables = $db->query("SELECT name FROM sqlite_master WHERE type='table'")
-            ->fetchAll(PDO::FETCH_COLUMN);
-
-        foreach ($tables as $t) {
-            $row = $db->query("SELECT sql FROM sqlite_master WHERE name='$t'")
-                ->fetch(PDO::FETCH_ASSOC);
-
-            if (!empty($row["sql"])) {
-                $dump .= $row["sql"] . ";\n\n";
-            }
-
-            $rows = $db->query("SELECT * FROM `$t`")->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($rows as $r) {
-                $dump .= "INSERT INTO `$t` VALUES (";
-                $dump .= implode(",", array_map(fn($v) => $v === null ? "NULL" : "'" . str_replace("'", "''", $v) . "'", array_values($r)));
-                $dump .= ");\n";
-            }
-            $dump .= "\n";
-        }
-    } else {
-        // MySQL Export as File
-        $tables = $db->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
-        foreach ($tables as $t) {
-            $create = $db->query("SHOW CREATE TABLE `$t`")->fetch(PDO::FETCH_ASSOC);
-            $dump .= $create['Create Table'] . ";\n\n";
-
-            $rows = $db->query("SELECT * FROM `$t`")->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($rows as $r) {
-                $dump .= "INSERT INTO `$t` VALUES (";
-                $dump .= implode(",", array_map(fn($v) => $v === null ? "NULL" : "'" . str_replace("'", "\'", $v) . "'", array_values($r)));
-                $dump .= ");\n";
-            }
-            $dump .= "\n";
-        }
-    }
-
-    $filename = 'backup_' . date('Ymd_His') . '.sql';
-    header('Content-Type: application/sql; charset=utf-8');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    echo $dump;
-    exit;
+function handleExportSql(PDO $db): array
+{
+    return ["sql" => generate_agnostic_dump($db)];
 }
 
-/* ---------------- IMPORT SQL ---------------- */
-if ($action === "import_sql") {
+function handleImportSql(PDO $db, bool $is_admin): bool
+{
+    if (!$is_admin)
+        throw new Exception("UNAUTHORIZED");
+    $sql = trim($_POST["sql"] ?? "");
+    if (!$sql)
+        throw new Exception("SQL_EMPTY");
+
+    $sql = preg_replace('/\bBEGIN\b.*?;|COMMIT;|ROLLBACK;/i', '', $sql);
+    $db->exec($sql);
+    if (function_exists('sp_log'))
+        sp_log("SQL Imported (Admin Console)", "db_import");
+    return true;
+}
+
+function handleImportFile(PDO $db, bool $is_admin): bool
+{
+    if (!$is_admin)
+        throw new Exception("UNAUTHORIZED");
+    if (!isset($_FILES['sql_file']) || $_FILES['sql_file']['error'] !== UPLOAD_ERR_OK) {
+        throw new Exception("FILE_UPLOAD_ERROR");
+    }
+
+    $sql = file_get_contents($_FILES['sql_file']['tmp_name']);
+    $sql = preg_replace('/\bBEGIN\b.*?;|COMMIT;|ROLLBACK;/i', '', $sql);
+
+    $db->beginTransaction();
     try {
-        $sql = trim($_POST["sql"] ?? "");
-        if (!$sql) {
-            echo json_encode(["ok" => false, "error" => "SQL_EMPTY"]);
-            exit;
-        }
-
-        // Remove BEGIN/COMMIT
-        $sql = preg_replace('/\bBEGIN\b.*?;|COMMIT;|ROLLBACK;/i', '', $sql);
-
         $db->exec($sql);
-
-        echo json_encode(["ok" => true]);
-    } catch (Exception $e) {
-        echo json_encode(["ok" => false, "error" => $e->getMessage()]);
-    }
-    exit;
-}
-
-/* ---------------- IMPORT SQL FILE (multipart upload) ---------------- */
-if ($action === 'import_file') {
-    try {
-        if (!isset($_FILES['sql_file']) || $_FILES['sql_file']['error'] !== UPLOAD_ERR_OK) {
-            echo json_encode(["ok" => false, "error" => "NO_FILE", "message_key" => "no_file"]);
-            exit;
-        }
-
-        $f = $_FILES['sql_file'];
-
-        $content = file_get_contents($f['tmp_name']);
-        if (!$content) {
-            echo json_encode(["ok" => false, "error" => "EMPTY_FILE", "message_key" => "empty_file"]);
-            exit;
-        }
-
-        // Basic safety checks - block dangerous keywords for non-admins
-        if (!$is_admin && preg_match('/\b(drop|attach|pragma|sqlite_master|\.read)\b/i', $content)) {
-            echo json_encode(["ok" => false, "error" => "FORBIDDEN_KEYWORDS_IN_FILE", "message_key" => "forbidden_keywords_in_file"]);
-            exit;
-        }
-
-        // Remove BEGIN/COMMIT to avoid nested transactions
-        $content = preg_replace('/\bBEGIN\b.*?;|COMMIT;|ROLLBACK;/i', '', $content);
-
-        $db->beginTransaction();
-        $db->exec($content);
         $db->commit();
-
-        echo json_encode(["ok" => true]);
-    } catch (Exception $e) {
-        if ($db->inTransaction())
-            $db->rollBack();
-        echo json_encode(["ok" => false, "error" => $e->getMessage()]);
+    } catch (Throwable $e) {
+        $db->rollBack();
+        throw $e;
     }
-    exit;
+
+    if (function_exists('sp_log'))
+        sp_log("SQL File Imported", "db_import_file");
+    return true;
 }
 
-echo json_encode(["error" => "INVALID_ACTION"]);
+/* ======================================================
+   SUPPORT HELPERS
+   ====================================================== */
 
+function get_primary_key_agnostic(PDO $db, string $table): string
+{
+    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+    try {
+        if ($driver === 'sqlite') {
+            $cols = $db->query("PRAGMA table_info(`$table`)")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($cols as $c)
+                if ($c['pk'])
+                    return $c['name'];
+        } else {
+            $cols = $db->query("DESCRIBE `$table`")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($cols as $c)
+                if ($c['Key'] === 'PRI')
+                    return $c['Field'];
+        }
+    } catch (Throwable) {
+    }
+    return 'id';
+}
+
+function generate_agnostic_dump(PDO $db): string
+{
+    $dump = "-- SpeedPage Agnostic Backup\n-- Date: " . date('Y-m-d H:i:s') . "\n\n";
+    $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+
+    if ($driver === 'sqlite') {
+        $tables = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($tables as $t) {
+            $create = $db->query("SELECT sql FROM sqlite_master WHERE name='$t'")->fetchColumn();
+            $dump .= "$create;\n\n";
+            $rows = $db->query("SELECT * FROM `$t`")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $vals = implode(",", array_map(fn($v) => $v === null ? "NULL" : "'" . str_replace("'", "''", (string) $v) . "'", array_values($r)));
+                $dump .= "INSERT INTO `$t` VALUES ($vals);\n";
+            }
+            $dump .= "\n";
+        }
+    } else {
+        $tables = $db->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($tables as $t) {
+            $create = $db->query("SHOW CREATE TABLE `$t`")->fetch(PDO::FETCH_ASSOC);
+            $dump .= $create['Create Table'] . ";\n\n";
+            $rows = $db->query("SELECT * FROM `$t`")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $vals = implode(",", array_map(fn($v) => $v === null ? "NULL" : "'" . str_replace("'", "\\'", (string) $v) . "'", array_values($r)));
+                $dump .= "INSERT INTO `$t` VALUES ($vals);\n";
+            }
+            $dump .= "\n";
+        }
+    }
+    return $dump;
+}

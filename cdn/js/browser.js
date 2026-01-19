@@ -2,6 +2,13 @@
 let brPath = ''; // Mevcut dizin yolu
 let brOpenFile = ''; // Düzenlenen dosya yolu
 
+// Selection Mode Object
+window.browserSelectMode = {
+    active: false,
+    targetId: null,
+    onSelect: null // Optional callback
+};
+
 /**
  * Klasör içeriğini yükler
  * @param {string} path - Yüklenecek dizin yolu
@@ -66,9 +73,39 @@ function brLoad(path = '') {
 }
 
 function brAction(path, type, ext) {
-    if (type === 'dir') brLoad(path);
-    else brEdit(path, ext);
+    if (type === 'dir') {
+        brLoad(path);
+    } else {
+        // Selection Logic
+        if (window.browserSelectMode && window.browserSelectMode.active) {
+            if (window.browserSelectMode.targetId) {
+                const targetEl = document.getElementById(window.browserSelectMode.targetId);
+                if (targetEl) {
+                    // media/ klasöründen sonrasını al
+                    let relativePath = path.includes('media/') ? 'media/' + path.split('media/').pop() : path;
+                    targetEl.value = relativePath;
+                    targetEl.dispatchEvent(new Event('change')); // Önizlemeyi tetikle
+                    targetEl.dispatchEvent(new Event('input'));
+                }
+            }
+
+            // #browserModal Modalını Kapat
+            const modalEl = document.getElementById('browserModal');
+            if (modalEl) {
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+            }
+
+            // Seçim modunu sıfırla
+            window.browserSelectMode.active = false;
+        } else {
+            brEdit(path, ext);
+        }
+    }
 }
+
+// Alias
+const brOpen = brAction;
 
 function brUnzip(p) {
     if (confirm("Dosyalar bu klasöre çıkartılacak. Onaylıyor musunuz?")) {
@@ -103,8 +140,13 @@ function brEdit(p, e) {
             </div>
             <textarea id="br-editor" class="form-control bg-dark text-white border-0 p-3" style="height:500px; font-family:monospace; resize:none;">${r.content}</textarea>
         `);
-        new bootstrap.Modal('#br-modal').show();
+        // new bootstrap.Modal('#br-modal').show(); // Original line
     });
+
+    const modalEl = document.getElementById('br-modal');
+    if (modalEl) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
 }
 
 function brSave() {
@@ -126,12 +168,22 @@ function brDelete(p) {
 
 function brCreateFile() {
     let n = prompt("Dosya Adı:");
-    if (n) $.post('?page=browser&touch=1', { path: brPath, name: n, csrf: CSRF_TOKEN }, () => brLoad(brPath));
+    if (n) {
+        $.post('?page=browser&touch=1', { path: brPath, name: n, csrf: CSRF_TOKEN }, (res) => {
+            if (res && res.ok) brLoad(brPath);
+            else alert(res.error || "Dosya oluşturulamadı.");
+        }, 'json');
+    }
 }
 
 function brCreateFolder() {
     let n = prompt("Klasör Adı:");
-    if (n) $.post('?page=browser&mkdir=1', { path: brPath, name: n, csrf: CSRF_TOKEN }, () => brLoad(brPath));
+    if (n) {
+        $.post('?page=browser&mkdir=1', { path: brPath, name: n, csrf: CSRF_TOKEN }, (res) => {
+            if (res && res.ok) brLoad(brPath);
+            else alert(res.error || "Klasör oluşturulamadı.");
+        }, 'json');
+    }
 }
 
 function brRename(p, n) {
@@ -148,21 +200,76 @@ $(document).keydown(function (e) {
 });
 
 // Dosya Yükleme
-$('#br-upload').change(e => {
-    let fd = new FormData();
-    [...e.target.files].forEach(f => {
+$('#br-upload').off('change').on('change', e => {
+    let files = [...e.target.files];
+    if (files.length === 0) return;
+
+    let uploadNext = (index) => {
+        if (index >= files.length) {
+            brLoad(brPath);
+            return;
+        }
+
+        let f = files[index];
+        let fd = new FormData();
         fd.append('path', brPath);
         fd.append('f', f);
         fd.append('csrf', CSRF_TOKEN);
+
         $.ajax({
             url: '?page=browser&upload=1',
             method: 'POST',
             data: fd,
             processData: false,
             contentType: false,
-            success: () => brLoad(brPath)
+            dataType: 'json',
+            success: (res) => {
+                if (res && res.ok) {
+                    uploadNext(index + 1);
+                } else {
+                    alert((res.error || "Yükleme hatası") + ": " + f.name);
+                    uploadNext(index + 1);
+                }
+            },
+            error: () => {
+                alert("Sunucu hatası: " + f.name);
+                uploadNext(index + 1);
+            }
         });
-    });
+    };
+
+    uploadNext(0);
 });
 
-$(document).ready(() => brLoad(''));
+// --- MEDIA BROWSER HELPER ---
+function openMediaBrowser(targetId, initialPath = '') {
+    if (typeof window.browserSelectMode === 'undefined') {
+        window.browserSelectMode = { active: false, targetId: null };
+    }
+
+    window.browserSelectMode.active = true;
+    window.browserSelectMode.targetId = targetId;
+
+    // Modalı aç
+    const modalEl = document.getElementById('browserModal');
+    if (modalEl) {
+        let modal = bootstrap.Modal.getInstance(modalEl);
+        if (!modal) {
+            modal = new bootstrap.Modal(modalEl);
+        }
+        modal.show();
+        if (typeof brLoad === 'function') {
+            // Eğer bir başlangıç yolu belirtilmişse onu kullan, yoksa mevcut brPath ile devam et
+            brLoad(initialPath || brPath || '');
+        }
+    } else {
+        alert('Browser modal bulunamadı!');
+    }
+}
+
+$(document).ready(() => {
+    // Sadece bir kez çağrılması yeterli
+    if (typeof brPath === 'undefined' || brPath === '') {
+        brLoad('');
+    }
+});

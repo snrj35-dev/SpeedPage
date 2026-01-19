@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Default Theme Functions & Hooks
  */
@@ -8,7 +9,7 @@ add_hook('head_start', function () {
     global $settings;
     if (!empty($settings['logo_url'])) {
         echo '<!-- Default Theme: Logo to Favicon -->
-        <link rel="icon" type="image/png" href="' . htmlspecialchars($settings['logo_url']) . '">';
+        <link rel="icon" type="image/png" href="' . e($settings['logo_url']) . '">';
     }
 });
 
@@ -36,8 +37,8 @@ add_hook('content_start', function () {
 
     echo '<div class="hero-banner mb-5 d-flex align-items-center justify-content-center text-center">
         <div class="hero-glass">
-            <h1 class="fw-black mb-2">' . htmlspecialchars($finalHeroTitle) . '</h1>
-            <p class="lead opacity-90 fw-medium m-0">' . htmlspecialchars($settings['site_slogan'] ?? 'SpeedPage') . '</p>
+            <h1 class="fw-black mb-2">' . e($finalHeroTitle) . '</h1>
+            <p class="lead opacity-90 fw-medium m-0">' . e($settings['site_slogan'] ?? 'SpeedPage') . '</p>
         </div>
     </div>';
 });
@@ -76,7 +77,7 @@ add_hook('before_footer', function () {
 
     echo '<div class="site-slogan-band py-5 text-center mt-5">
         <div class="container container-narrow">
-            <h2 class="display-5 fw-black mb-0">' . htmlspecialchars($settings['site_slogan']) . '</h2>
+            <h2 class="display-5 fw-black mb-0">' . e($settings['site_slogan']) . '</h2>
         </div>
     </div>';
 });
@@ -84,6 +85,6 @@ add_hook('before_footer', function () {
 // 6. Footer System Info Hook
 add_hook('footer_end', function () {
     echo '<div class="text-center pb-5 opacity-40 small">
-        SpeedPage v0.1 Alpha | Default Theme
+        <span lang="site_version"></span> | Default Theme
     </div>';
 });
