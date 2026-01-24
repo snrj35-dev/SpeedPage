@@ -109,6 +109,45 @@ if ($action === 'delete') {
     }
 }
 
+// --- MENÜ SIRALAMA İŞLEMİ (JSON Request) ---
+$jsonInput = file_get_contents('php://input');
+if (!empty($jsonInput)) {
+    $data = json_decode($jsonInput, true);
+    if (isset($data['mode']) && $data['mode'] === 'reorder_menus') {
+        header("Content-Type: application/json; charset=utf-8");
+
+        // CSRF Check
+        if (!isset($data['csrf']) || $data['csrf'] !== $_SESSION['csrf']) {
+            echo json_encode(['ok' => false, 'error' => 'CSRF verification failed']);
+            exit;
+        }
+
+        try {
+            $menus = $data['menus'] ?? [];
+            $db->beginTransaction();
+
+            foreach ($menus as $menu) {
+                $id = (int) ($menu['id'] ?? 0);
+                $order = (int) ($menu['order'] ?? 0);
+
+                if ($id > 0 && $order > 0) {
+                    $stmt = $db->prepare("UPDATE menus SET sort_order = ? WHERE id = ?");
+                    $stmt->execute([$order, $id]);
+                }
+            }
+
+            $db->commit();
+            echo json_encode(['ok' => true]);
+            exit;
+
+        } catch (Exception $e) {
+            $db->rollBack();
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+            exit;
+        }
+    }
+}
+
 // --- MENÜ İŞLEMLERİ (Merge from menu-panel.php) ---
 $menuAction = filter_input(INPUT_POST, 'menu_action');
 if ($menuAction) {

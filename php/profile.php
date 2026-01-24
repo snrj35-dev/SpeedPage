@@ -34,9 +34,8 @@ if ($settings['allow_user_theme'] == '1' || $is_admin) {
     }
 }
 
-if (!$is_own_profile && !$is_admin) {
-    die('<div class="alert alert-danger small text-center"><span lang="profile_no_permission"></span></div>');
-}
+// Permission Check: Admin can see everything, users can see their own profile and others' limited profile
+$can_edit = ($is_own_profile || $is_admin);
 
 $stmt = $db->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$user_id]);
@@ -143,70 +142,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </div>
                                 <h4 class="mb-0"><?= e($user['username']) ?></h4>
                                 <small class="text-muted text-uppercase"><?= e($user['role']) ?></small>
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label small" lang="choose_profile_icon"></label>
-                                <div class="d-flex flex-wrap gap-2 p-3 bg-secondary bg-opacity-10 rounded-3 overflow-auto"
-                                    style="max-height:160px;">
-                                    <?php
-                                    $icons = ['fa-user', 'fa-user-ninja', 'fa-user-astronaut', 'fa-user-tie', 'fa-user-secret', 'fa-ghost', 'fa-robot', 'fa-skull', 'fa-dragon', 'fa-cat', 'fa-dog', 'fa-rocket', 'fa-code'];
-                                    foreach ($icons as $ico): ?>
-                                        <div class="avatar-selection">
-                                            <input type="radio" class="btn-check" name="avatar_url" id="ico-<?= $ico ?>"
-                                                value="<?= $ico ?>" <?= ($user['avatar_url'] == $ico) ? 'checked' : '' ?>>
-                                            <label class="btn btn-outline-primary border-0" for="ico-<?= $ico ?>"><i
-                                                    class="fas <?= $ico ?> fa-lg"></i></label>
-                                        </div>
-                                    <?php endforeach; ?>
-                                </div>
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label small" lang="display_name_label"></label>
-                                <input type="text" name="display_name" class="form-control"
-                                    value="<?= e($user['display_name']) ?>" required>
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label small" lang="username_label"></label>
-                                <input type="text" name="username" class="form-control"
-                                    value="<?= e($user['username']) ?>" <?= ($allow_username || $is_admin) ? '' : 'disabled' ?>>
-                            </div>
-
-                            <?php if ($settings['allow_user_theme'] == '1' || $is_admin): ?>
-                                <div class="mb-3">
-                                    <label class="form-label small">Tercih Edilen Tema</label>
-                                    <select name="preferred_theme" class="form-select">
-                                        <option value="">Sistem Varsayılanı</option>
-                                        <?php foreach ($available_themes as $folder => $title): ?>
-                                            <option value="<?= e($folder) ?>" <?= ($user['preferred_theme'] == $folder) ? 'selected' : '' ?>><?= e($title) ?></option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                </div>
-                            <?php endif; ?>
-
-                            <div class="p-3 bg-secondary bg-opacity-10 rounded-3 mb-4">
-                                <h6 class="small fw-bold mb-3"><i class="fas fa-lock me-2"></i><span
-                                        lang="security_settings"></span></h6>
-                                <?php if ($is_own_profile): ?>
-                                    <div class="mb-3">
-                                        <label class="form-label small opacity-75" lang="current_password_label"></label>
-                                        <input type="password" name="current_password" class="form-control">
+                                <?php if (!$can_edit): ?>
+                                    <div class="mt-2"><span class="badge bg-secondary opacity-75">Salt Okunur Profil</span>
                                     </div>
                                 <?php endif; ?>
-                                <div class="mb-0">
-                                    <label class="form-label small opacity-75" lang="new_password_label"></label>
-                                    <input type="password" name="new_password" class="form-control">
-                                    <small class="text-muted" style="font-size:0.6rem;"
-                                        lang="only_fill_if_want"></small>
-                                </div>
                             </div>
 
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-primary btn-lg rounded-3"><i
-                                        class="fas fa-save me-2"></i><span lang="save_changes"></span></button>
-                            </div>
+                            <?php if ($can_edit): ?>
+
+                                <div class="mb-3">
+                                    <label class="form-label small" lang="choose_profile_icon"></label>
+                                    <div class="d-flex flex-wrap gap-2 p-3 bg-secondary bg-opacity-10 rounded-3 overflow-auto"
+                                        style="max-height:160px;">
+                                        <?php
+                                        $icons = ['fa-user', 'fa-user-ninja', 'fa-user-astronaut', 'fa-user-tie', 'fa-user-secret', 'fa-ghost', 'fa-robot', 'fa-skull', 'fa-dragon', 'fa-cat', 'fa-dog', 'fa-rocket', 'fa-code'];
+                                        foreach ($icons as $ico): ?>
+                                            <div class="avatar-selection">
+                                                <input type="radio" class="btn-check" name="avatar_url" id="ico-<?= $ico ?>"
+                                                    value="<?= $ico ?>" <?= ($user['avatar_url'] == $ico) ? 'checked' : '' ?>>
+                                                <label class="btn btn-outline-primary border-0" for="ico-<?= $ico ?>"><i
+                                                        class="fas <?= $ico ?> fa-lg"></i></label>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label small" lang="display_name_label"></label>
+                                    <input type="text" name="display_name" class="form-control"
+                                        value="<?= e($user['display_name']) ?>" required>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label small" lang="username_label"></label>
+                                    <input type="text" name="username" class="form-control"
+                                        value="<?= e($user['username']) ?>" <?= ($allow_username || $is_admin) ? '' : 'disabled' ?>>
+                                </div>
+
+                                <?php if ($settings['allow_user_theme'] == '1' || $is_admin): ?>
+                                    <div class="mb-3">
+                                        <label class="form-label small">Tercih Edilen Tema</label>
+                                        <select name="preferred_theme" class="form-select">
+                                            <option value="">Sistem Varsayılanı</option>
+                                            <?php foreach ($available_themes as $folder => $title): ?>
+                                                <option value="<?= e($folder) ?>" <?= ($user['preferred_theme'] == $folder) ? 'selected' : '' ?>><?= e($title) ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                <?php endif; ?>
+
+                                <div class="p-3 bg-secondary bg-opacity-10 rounded-3 mb-4">
+                                    <h6 class="small fw-bold mb-3"><i class="fas fa-lock me-2"></i><span
+                                            lang="security_settings"></span></h6>
+                                    <?php if ($is_own_profile): ?>
+                                        <div class="mb-3">
+                                            <label class="form-label small opacity-75" lang="current_password_label"></label>
+                                            <input type="password" name="current_password" class="form-control">
+                                        </div>
+                                    <?php endif; ?>
+                                    <div class="mb-0">
+                                        <label class="form-label small opacity-75" lang="new_password_label"></label>
+                                        <input type="password" name="new_password" class="form-control">
+                                        <small class="text-muted" style="font-size:0.6rem;"
+                                            lang="only_fill_if_want"></small>
+                                    </div>
+                                </div>
+
+                                <div class="d-grid">
+                                    <button type="submit" class="btn btn-primary btn-lg rounded-3"><i
+                                            class="fas fa-save me-2"></i><span lang="save_changes"></span></button>
+                                </div>
+                            <?php else: ?>
+                                <div class="mb-3">
+                                    <label class="form-label small opacity-75" lang="display_name_label"></label>
+                                    <div class="form-control bg-light"><?= e($user['display_name']) ?></div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small opacity-75" lang="username_label"></label>
+                                    <div class="form-control bg-light"><?= e($user['username']) ?></div>
+                                </div>
+                                <div class="alert alert-info small mt-4">
+                                    <i class="fas fa-info-circle me-2"></i> Bu profili sadece görüntüleyebilirsiniz.
+                                </div>
+                            <?php endif; ?>
                         </form>
                     </div>
                 </div>

@@ -13,7 +13,10 @@ function getUrl(page) {
 function loadPage(page = "home", push = true) {
     loader.classList.remove("d-none");
 
-    fetch(`page.php?page=${page}`)
+    // ✅ Hash (#) varsa ayıkla, sunucuya sadece temiz slug gönder
+    const [cleanSlug, hash] = page.split('#');
+
+    fetch(`page.php?page=${cleanSlug}`)
         .then(res => res.json())
         .then(data => {
             content.innerHTML = data.html;
@@ -22,6 +25,17 @@ function loadPage(page = "home", push = true) {
 
             if (push) {
                 history.pushState({ page }, "", getUrl(page));
+            }
+
+            // ✅ Sayfa yüklendikten sonra odaklanma (Hash varsa)
+            const targetHash = hash ? '#' + hash : window.location.hash;
+            if (targetHash && targetHash.length > 1) {
+                setTimeout(() => {
+                    try {
+                        const el = document.querySelector(targetHash);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    } catch (e) { console.warn("Invalid hash selector:", targetHash); }
+                }, 600);
             }
         })
         .catch(() => {
@@ -33,22 +47,36 @@ window.addEventListener("DOMContentLoaded", () => {
     const currentPath = window.location.pathname;
     const urlParams = new URLSearchParams(window.location.search);
     let initialPage = "home";
+    let fullParams = window.location.search;
 
-    // 1. ÖNCE: URL'de ?page= var mı bak (Bu her zaman öncelikli olmalı)
+    // 1. ÖNCE: URL'de ?page= var mı bak
     if (urlParams.has("page")) {
         initialPage = urlParams.get("page");
     }
     // 2. SONRA: Eğer Friendly URL aktifse path'den yakala
     else if (typeof FRIENDLY_URL !== 'undefined' && FRIENDLY_URL === "1") {
         const cleanPath = currentPath.replace(BASE_PATH, "").replace(/^\/+|\/+$/g, "");
-        // index.php dosyasını veya boş yolu ele
         if (cleanPath !== "" && cleanPath !== "index.php") {
             initialPage = cleanPath;
+            fullParams = ""; // Friendly URL case,params are in path usually
         }
     }
 
-    // Yakalanan sayfayı yükle
-    loadPage(initialPage, false);
+    // Yakalanan sayfayı yükle (Parametreleri koruyarak)
+    const target = fullParams ? initialPage + fullParams.replace('?page=' + initialPage, '').replace('page=' + initialPage, '') : initialPage;
+
+    // Eğer URL'de halihazırda bir hash varsa koru
+    const finalTarget = (target + window.location.hash).replace('?&', '?').replace('&&', '&').replace(/\?$/, '');
+
+    loadPage(finalTarget, false);
+
+    // Eğer hash varsa (ancor), içerik yüklendikten sonra oraya kaydır
+    if (window.location.hash) {
+        setTimeout(() => {
+            const el = document.querySelector(window.location.hash);
+            if (el) el.scrollIntoView();
+        }, 800);
+    }
 });
 window.addEventListener("popstate", e => {
     if (e.state?.page) loadPage(e.state.page, false);

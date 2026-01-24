@@ -19,6 +19,11 @@ require_once 'admin/db.php';
 /** @var PDO $db */
 global $db;
 
+// 🚀 Load Module Hooks
+if (function_exists('sp_load_module_hooks')) {
+    sp_load_module_hooks();
+}
+
 // Load Settings
 $stmt = $db->query("SELECT `key`, `value` FROM settings");
 $settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);

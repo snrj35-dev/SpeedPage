@@ -42,7 +42,7 @@ $page = filter_input(INPUT_GET, 'page', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
 
 if (isset($is_admin)) {
     // $is_admin comes from auth.php
-    $default_page = $is_admin ? 'settings' : 'pages';
+    $default_page = $is_admin ? 'dashboard' : 'pages';
 } else {
     $default_page = 'pages'; // Fallback
 }
@@ -61,11 +61,13 @@ $globalJs = [
     CDN_URL . "js/jquery-3.7.1.min.js",
     CDN_URL . "js/bootstrap.bundle.min.js",
     CDN_URL . "js/dark.js",
-    CDN_URL . "js/admin.js"
+    CDN_URL . "js/admin.js",
+    CDN_URL . "js/market.js"
 ];
 
 // Sayfa bazlı CSS/JS
 $pageAssets = [
+    'dashboard' => ['css' => [], 'js' => []],
     'settings' => ['css' => [], 'js' => []],
     'pages' => [
         'css' => [
@@ -83,6 +85,7 @@ $pageAssets = [
             CDN_URL . "js/codemirror/mode/php.min.js",
             CDN_URL . "js/highlight.min.js",
             CDN_URL . "js/pages.js",
+            CDN_URL . "js/Sortable.min.js",
             CDN_URL . "js/browser.js"
         ]
     ],
@@ -107,6 +110,59 @@ $pageAssets = [
 
 
 $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
+
+// 🚀 Dynamic Asset Loading (DB)
+try {
+    $stmtPage = $db->prepare("SELECT id FROM pages WHERE slug = ? AND is_active = 1");
+    $stmtPage->execute([$page]);
+    $pId = $stmtPage->fetchColumn();
+
+    if ($pId) {
+        $stmtAssets = $db->prepare("SELECT type, path FROM page_assets WHERE page_id = ? ORDER BY load_order ASC");
+        $stmtAssets->execute([$pId]);
+        $assets = $stmtAssets->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($assets as $ast) {
+            // Check if path is absolute URL (http/https) or local
+            $fullPath = (strpos($ast['path'], 'http') === 0)
+                ? $ast['path']
+                : BASE_URL . $ast['path'];
+
+            if ($ast['type'] === 'css') {
+                $currentAssets['css'][] = $fullPath;
+            } elseif ($ast['type'] === 'js') {
+                $currentAssets['js'][] = $fullPath;
+            }
+        }
+    }
+} catch (Throwable $e) {
+    // Silent fail
+}
+
+// 🛠 Modül Admin Paneli Assetlerini Yükle
+try {
+    // Mevcut sayfa bir modülün admin sayfası mı?
+    $stmtMod = $db->prepare("SELECT id FROM modules WHERE page_slug = ? AND is_active = 1");
+    $stmtMod->execute([$page]);
+    $moduleId = $stmtMod->fetchColumn();
+
+    if ($moduleId) {
+        $stmtModAssets = $db->prepare("SELECT type, path FROM module_assets WHERE module_id = ? ORDER BY load_order ASC");
+        $stmtModAssets->execute([$moduleId]);
+        $mAssets = $stmtModAssets->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($mAssets as $ma) {
+            $fPath = (strpos($ma['path'], 'http') === 0) ? $ma['path'] : BASE_URL . $ma['path'];
+            if ($ma['type'] === 'css') {
+                $currentAssets['css'][] = $fPath;
+            } else {
+                $currentAssets['js'][] = $fPath;
+            }
+        }
+    }
+} catch (Throwable $e) {
+    // Hata durumunda sessiz kal
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?= htmlspecialchars($settings['default_lang'] ?? 'tr') ?>">
@@ -125,6 +181,7 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
         })();
         const DEFAULT_SITE_LANG = "<?= htmlspecialchars($settings['default_lang'] ?? 'tr') ?>";
         const BASE_PATH = '<?= e(BASE_PATH) ?>';
+        const BASE_URL = '<?= e(BASE_URL) ?>';
         const CSRF_TOKEN = '<?= e($_SESSION['csrf']) ?>';
     </script>
     <!-- Global CSS -->
@@ -140,8 +197,7 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
 
 <body>
 
-    <nav class="navbar px-4 py-3 border-bottom">
-        <span class="fw-bold" lang="page_title"></span>
+    <nav class="navbar px-4 border-bottom">
         <div class="ms-auto d-flex align-items-center gap-3">
             <a href="<?= BASE_URL ?>php/profile.php?id=<?= $_SESSION['user_id'] ?>"
                 class="d-flex align-items-center text-decoration-none me-3 transition-hover">
@@ -149,7 +205,7 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
                     style="width: 35px; height: 35px; border-radius: 50%; font-size: 14px;">
                     <i class="fas <?= e($finalAvatar) ?>"></i>
                 </div>
-                <span class="fw-bold text d-none d-sm-inline"><?= e($finalName) ?></span>
+                <span class="fw-bold text d-sm-inline"><?= e($finalName) ?></span>
             </a>
             <a href="../index.php" class="btn btn-sm btn-outline-success"><i class="fa-solid fa-home"></i></a>
             <a href="../php/logout.php" class="btn btn-sm btn-outline-danger"><i
@@ -165,52 +221,137 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
 
 
 
-    <!-- Menü -->
-    <div class="admin-nav-container border-bottom sticky-top shadow-sm" style="top:0px; z-index: 1020;">
-        <nav class="nav admin-nav-scroll px-3">
+    <!-- Mobile Tab Bar -->
+    <div class="adm-mobile-tab-bar d-lg-none">
+        <a href="index.php?page=<?= $default_page ?>"
+            class="adm-tab-item <?= $page === $default_page ? 'active' : '' ?>">
+            <i class="fa-solid fa-house"></i>
+            <span lang="home">Ana Sayfa</span>
+        </a>
+        <a href="index.php?page=pages" class="adm-tab-item <?= $page === 'pages' ? 'active' : '' ?>">
+            <i class="fas fa-file"></i>
+            <span lang="pages">Sayfalar</span>
+        </a>
+        <a href="#" class="adm-tab-item" id="admMobileMenuBtn">
+            <i class="fa-solid fa-bars"></i>
+            <span lang="menu">Menü</span>
+        </a>
+
+    </div>
+
+    <!-- Sidebar -->
+    <div class="adm-sidebar" id="admSidebar">
+        <div class="adm-sidebar-header">
+            <i class="fa-solid fa-fire text-warning adm-nav-icon"></i>
+            <span class="adm-nav-text fw-bold"><?= e($settings['site_name'] ?? 'SpeedPage') ?></span>
+        </div>
+
+        <nav class="adm-nav-list mt-3">
             <?php if (isset($is_admin) && $is_admin): ?>
-                <a href="index.php?page=settings" class="nav-link <?= $page === 'settings' ? 'active' : '' ?>">
-                    <i class="fas fa-cog"></i> <span lang="settings"></span>
+                <a href="index.php?page=dashboard" class="adm-nav-item-link <?= $page === 'dashboard' ? 'active' : '' ?>">
+                    <i class="fas fa-tachometer-alt adm-nav-icon"></i>
+                    <span class="adm-nav-text" lang="dashboard">Dashboard</span>
+                </a>
+
+            <?php endif; ?>
+
+            <?php if (isset($is_admin) && $is_admin): ?>
+                <a href="index.php?page=settings" class="adm-nav-item-link <?= $page === 'settings' ? 'active' : '' ?>">
+                    <i class="fas fa-cog adm-nav-icon"></i>
+                    <span class="adm-nav-text" lang="settings">Ayarlar</span>
                 </a>
             <?php endif; ?>
-            <a href="index.php?page=pages" class="nav-link <?= $page === 'pages' ? 'active' : '' ?>">
-                <i class="fas fa-file"></i> <span lang="pages"></span> / <span lang="menu_management"></span>
+
+            <a href="index.php?page=pages" class="adm-nav-item-link <?= $page === 'pages' ? 'active' : '' ?>">
+                <i class="fas fa-file adm-nav-icon"></i>
+                <span class="adm-nav-text" lang="pagesmenu">Sayfalar ve Menüler</span>
             </a>
-            <!-- Menu Management merged into Pages -->
-            <a href="index.php?page=modules" class="nav-link <?= $page === 'modules' ? 'active' : '' ?>">
-                <i class="fas fa-puzzle-piece"></i> <span lang="modules"></span>
+
+            <a href="index.php?page=modules" class="adm-nav-item-link <?= $page === 'modules' ? 'active' : '' ?>">
+                <i class="fas fa-puzzle-piece adm-nav-icon"></i>
+                <span class="adm-nav-text" lang="modules">Modüller</span>
             </a>
+
             <a href="index.php?page=themes"
-                class="nav-link <?= ($page === 'themes' || $page === 'theme-settings') ? 'active' : '' ?>">
-                <i class="fas fa-palette"></i> <span lang="themes"></span>
+                class="adm-nav-item-link <?= ($page === 'themes' || $page === 'theme-settings') ? 'active' : '' ?>">
+                <i class="fas fa-palette adm-nav-icon"></i>
+                <span class="adm-nav-text" lang="themes">Temalar</span>
             </a>
+
             <?php if (!empty($is_admin) && $is_admin): ?>
-                <a href="index.php?page=users" class="nav-link <?= $page === 'users' ? 'active' : '' ?>">
-                    <i class="fas fa-users"></i> <span lang="users"></span>
+                <a href="index.php?page=users" class="adm-nav-item-link <?= $page === 'users' ? 'active' : '' ?>">
+                    <i class="fas fa-users adm-nav-icon"></i>
+                    <span class="adm-nav-text" lang="users">Kullanıcılar</span>
                 </a>
-                <a href="index.php?page=aipanel" class="nav-link <?= $page === 'aipanel' ? 'active' : '' ?>">
-                    <i class="fas fa-robot"></i> <span lang="ai_panel">AI Panel</span>
+
+                <a href="index.php?page=aipanel" class="adm-nav-item-link <?= $page === 'aipanel' ? 'active' : '' ?>">
+                    <i class="fas fa-robot adm-nav-icon"></i>
+                    <span class="adm-nav-text" lang="ai_panel">AI Panel</span>
                 </a>
-                <a href="index.php?page=browser" class="nav-link <?= $page === 'browser' ? 'active' : '' ?>">
-                    <i class="fas fa-folder-open"></i> <span lang="filebrowser"></span>
+
+                <a href="index.php?page=browser" class="adm-nav-item-link <?= $page === 'browser' ? 'active' : '' ?>">
+                    <i class="fas fa-folder-open adm-nav-icon"></i>
+                    <span class="adm-nav-text" lang="filebrowser">Dosya Tarayıcı</span>
                 </a>
-                <a href="index.php?page=system" class="nav-link <?= $page === 'system' ? 'active' : '' ?>">
-                    <i class="fas fa-microchip"></i> <span lang="system"></span>
+
+                <a href="index.php?page=system" class="adm-nav-item-link <?= $page === 'system' ? 'active' : '' ?>">
+                    <i class="fas fa-history adm-nav-icon"></i>
+                    <span class="adm-nav-text" lang="system">Hata Kayıtları</span>
                 </a>
-                <a href="index.php?page=dbpanel" class="nav-link <?= $page === 'dbpanel' ? 'active' : '' ?>">
-                    <i class="fas fa-database"></i> <span lang="database"></span>
+
+                <a href="index.php?page=dbpanel" class="adm-nav-item-link <?= $page === 'dbpanel' ? 'active' : '' ?>">
+                    <i class="fas fa-database adm-nav-icon"></i>
+                    <span class="adm-nav-text" lang="database">Veritabanı</span>
                 </a>
-                <a href="index.php?page=migration" class="nav-link <?= $page === 'migration' ? 'active' : '' ?>">
-                    <i class="fas fa-exchange-alt"></i> <span lang="migration_tool">Migration</span>
+
+                <a href="index.php?page=migration" class="adm-nav-item-link <?= $page === 'migration' ? 'active' : '' ?>">
+                    <i class="fas fa-exchange-alt adm-nav-icon"></i>
+                    <span class="adm-nav-text" lang="migration_tool">Migration</span>
                 </a>
             <?php endif; ?>
+
+            <?php
+            // Dynamic Module Admin Menus
+            try {
+                $modMenus = $db->query("SELECT name, admin_menu_title, admin_menu_url, admin_menu_icon, page_slug FROM modules WHERE is_active=1 AND admin_menu_url IS NOT NULL AND admin_menu_url != ''")->fetchAll(PDO::FETCH_ASSOC);
+                if ($modMenus) {
+                    echo '<div class="adm-nav-divider"></div>';
+                    echo '<div class="adm-nav-section-title">Modüller</div>';
+                    foreach ($modMenus as $mm) {
+                        $mPage = $mm['page_slug'];
+                        $activeClass = ($page === $mPage) ? 'active' : '';
+                        $mIcon = $mm['admin_menu_icon'] ?? 'fa-puzzle-piece';
+                        $mTitle = $mm['admin_menu_title'] ?? $mm['name'];
+                        echo '<a href="index.php?page=' . e($mPage) . '" class="adm-nav-item-link ' . $activeClass . '">';
+                        echo '<i class="fas ' . e($mIcon) . ' adm-nav-icon"></i>';
+                        echo '<span class="adm-nav-text">' . e($mTitle) . '</span>';
+                        echo '</a>';
+                    }
+                }
+            } catch (Throwable $e) {
+                // Ignore
+            }
+            ?>
         </nav>
+
+        <div class="border-top border-secondary">
+            <a href="../php/logout.php" class="adm-nav-item-link">
+                <i class="fa-solid fa-right-from-bracket adm-nav-icon"></i>
+                <span class="adm-nav-text" lang="logout">Çıkış</span>
+            </a>
+        </div>
     </div>
 
     <!-- İçerik -->
-    <div class="container p-4">
+    <div class="container p-4 adm-main-content">
         <?php
         switch ($page) {
+            case 'dashboard':
+                if (isset($is_admin) && $is_admin)
+                    require __DIR__ . "/dashboard-panel.php";
+                else
+                    echo "<div class='alert alert-danger'>" . e('Yetkisiz erişim.') . "</div>";
+                break;
             case 'settings':
                 if (isset($is_admin) && $is_admin)
                     require __DIR__ . "/settings-panel.php";
@@ -255,8 +396,23 @@ $currentAssets = $pageAssets[$page] ?? ['css' => [], 'js' => []];
                     require __DIR__ . "/ai-panel.php";
                 break;
             default:
-                echo "<p>Sayfa bulunamadı.</p>";
+                // Check if it matches an active module
+                $stmtMod = $db->prepare("SELECT name, admin_menu_url FROM modules WHERE page_slug = ? AND is_active = 1");
+                $stmtMod->execute([$page]);
+                $modInfo = $stmtMod->fetch(PDO::FETCH_ASSOC);
+
+                if ($modInfo && !empty($modInfo['admin_menu_url'])) {
+                    $modFile = ROOT_DIR . "modules/" . $modInfo['name'] . "/" . $modInfo['admin_menu_url'];
+                    if (file_exists($modFile)) {
+                        require $modFile;
+                    } else {
+                        echo "<div class='alert alert-danger'>Modül dosyası bulunamadı: " . e($modFile) . "</div>";
+                    }
+                } else {
+                    echo "<p>Sayfa bulunamadı.</p>";
+                }
         }
+
         ?>
     </div>
 

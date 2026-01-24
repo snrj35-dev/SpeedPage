@@ -37,7 +37,10 @@ try {
             description TEXT,
             page_slug TEXT,
             is_active INTEGER DEFAULT 1,
-            installed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            installed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            admin_menu_title TEXT,
+            admin_menu_url TEXT,
+            admin_menu_icon TEXT
         )";
         $queries[] = "CREATE TABLE IF NOT EXISTS module_assets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +67,10 @@ try {
             description LONGTEXT,
             page_slug LONGTEXT,
             is_active INT DEFAULT 1,
-            installed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            installed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            admin_menu_title VARCHAR(255),
+            admin_menu_url VARCHAR(255),
+            admin_menu_icon VARCHAR(50)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
         $queries[] = "CREATE TABLE IF NOT EXISTS module_assets (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -92,6 +98,31 @@ try {
         sp_log("Table creation error: " . $e->getMessage(), "system_error");
 }
 
+/* ---------------- Ensure columns exist (Migration for existing tables) ---------------- */
+try {
+    // Check if new columns exist, if not add them. 
+    // This is a simple check. For production, a proper migration system is better.
+    // However, considering the user's setup, we can try to add them and catch exception if they exist, 
+    // or inspect table info. Let's try to add safely for SQLite/MySQL.
+
+    $colsToAdd = [
+        'admin_menu_title' => $isSqlite ? 'TEXT' : 'VARCHAR(255)',
+        'admin_menu_url' => $isSqlite ? 'TEXT' : 'VARCHAR(255)',
+        'admin_menu_icon' => $isSqlite ? 'TEXT' : 'VARCHAR(50)'
+    ];
+
+    foreach ($colsToAdd as $col => $type) {
+        try {
+            $db->exec("ALTER TABLE modules ADD COLUMN $col $type");
+        } catch (Throwable $ex) {
+            // Column likely exists
+        }
+    }
+
+} catch (Throwable $e) {
+    // Ignore
+}
+
 /* ======================================================
    ACTION HANDLERS
    ====================================================== */
@@ -110,6 +141,8 @@ if ($action === 'upload') {
     handleDeleteTheme($db);
 } elseif ($action === 'clear_logs') {
     handleClearLogs($db);
+} elseif ($action === 'remote_install') {
+    handleRemoteInstall($db);
 }
 
 exit;
@@ -256,6 +289,16 @@ function installModule(PDO $db, string $slug, array $config, string $extractPath
     $menu_icon = $config['menu_icon'] ?? $icon;
     $locations = $config['locations'] ?? ['navbar'];
 
+    $createPage = (bool) ($config['create_page'] ?? true);
+    $createMenu = (bool) ($config['create_menu'] ?? true);
+
+    // Admin Menu details
+    $adminMenu = $config['admin_menu'] ?? [];
+    $adminMenuTitle = $adminMenu['title'] ?? null;
+    $adminMenuUrl = $adminMenu['url'] ?? null;
+    $adminMenuIcon = $adminMenu['icon'] ?? 'fa-puzzle-piece';
+
+
     // Uninstall Script handling (will stay in module folder)
 
     // Schema SQL
@@ -273,38 +316,81 @@ function installModule(PDO $db, string $slug, array $config, string $extractPath
     // DB Insert
     $db->beginTransaction();
     try {
-        $maxSort = (int) $db->query("SELECT COALESCE(MAX(sort_order),0) FROM pages")->fetchColumn();
-        $sortOrder = $maxSort + 1;
+        $sortOrder = null;
+        $pageId = null;
+        if ($createPage) {
+            $maxSort = (int) $db->query("SELECT COALESCE(MAX(sort_order),0) FROM pages")->fetchColumn();
+            $sortOrder = $maxSort + 1;
 
-        $stmt = $db->prepare("INSERT INTO pages (slug, title, description, icon, is_active, sort_order) VALUES (?,?,?,?,1,?)");
-        $stmt->execute([$slug, $title, $description, $icon, $sortOrder]);
-        $pageId = (int) $db->lastInsertId();
+            $stmt = $db->prepare("INSERT INTO pages (slug, title, description, icon, is_active, sort_order) VALUES (?,?,?,?,1,?)");
+            $stmt->execute([$slug, $title, $description, $icon, $sortOrder]);
+            $pageId = (int) $db->lastInsertId();
 
-        // Assets (Record with full module path)
-        foreach (['css', 'js'] as $type) {
-            $order = 1;
-            foreach ($config['assets'][$type] ?? [] as $asset) {
-                if (empty($asset))
-                    continue;
-                $assetPath = "modules/$slug/" . ltrim((string) $asset, '/');
-                $db->prepare("INSERT INTO page_assets (page_id, type, path, load_order) VALUES (?,?,?,?)")
-                    ->execute([$pageId, $type, $assetPath, $order++]);
+            // Assets (Record with full module path)
+            foreach (['css', 'js'] as $type) {
+                $order = 1;
+                foreach ($config['assets'][$type] ?? [] as $asset) {
+                    if (empty($asset))
+                        continue;
+                    $assetStr = (string) $asset;
+                    if (strpos($assetStr, 'http') === 0) {
+                        $assetPath = $assetStr;
+                    } else {
+                        $assetStr = ltrim($assetStr, '/');
+                        if (str_starts_with($assetStr, 'cdn/')) {
+                            $assetPath = $assetStr;
+                        } elseif (str_starts_with($assetStr, 'modules/')) {
+                            $assetPath = $assetStr;
+                        } else {
+                            $assetPath = "modules/$slug/" . $assetStr;
+                        }
+                    }
+                    $db->prepare("INSERT INTO page_assets (page_id, type, path, load_order) VALUES (?,?,?,?)")
+                        ->execute([$pageId, $type, $assetPath, $order++]);
+                }
             }
         }
 
-        // Menus
-        $db->prepare("INSERT INTO menus (page_id, title, icon, sort_order, is_active) VALUES (?,?,?,?,1)")
-            ->execute([$pageId, $menu_title, $menu_icon, $sortOrder]);
-        $menuId = (int) $db->lastInsertId();
+        // Menus (only if page exists)
+        if ($createPage && $createMenu) {
+            $db->prepare("INSERT INTO menus (page_id, title, icon, sort_order, is_active) VALUES (?,?,?,?,1)")
+                ->execute([$pageId, $menu_title, $menu_icon, (int) $sortOrder]);
+            $menuId = (int) $db->lastInsertId();
 
-        foreach ($locations as $loc) {
-            $db->prepare("INSERT INTO menu_locations (menu_id, location) VALUES (?,?)")->execute([$menuId, preg_replace('/[^a-z0-9_-]/', '', (string) $loc)]);
+            foreach ((array) $locations as $loc) {
+                $db->prepare("INSERT INTO menu_locations (menu_id, location) VALUES (?,?)")->execute([$menuId, preg_replace('/[^a-z0-9_-]/', '', (string) $loc)]);
+            }
         }
 
         // Modules Table
-        $db->prepare("INSERT INTO modules (name, title, version, description, page_slug) VALUES (?,?,?,?,?)")
-            ->execute([$slug, $title, $version, $description, $slug]);
+        $db->prepare("INSERT INTO modules (name, title, version, description, page_slug, admin_menu_title, admin_menu_url, admin_menu_icon) VALUES (?,?,?,?,?,?,?,?)")
+            ->execute([$slug, $title, $version, $description, $slug, $adminMenuTitle, $adminMenuUrl, $adminMenuIcon]);
+
         $moduleId = (int) $db->lastInsertId();
+
+        // Admin Assets (module_assets tablosuna kayıt)
+        if (!empty($config['assets'])) {
+            foreach (['css', 'js'] as $type) {
+                $order = 1;
+                foreach ($config['assets'][$type] ?? [] as $asset) {
+                    $assetStr = (string) $asset;
+                    if (strpos($assetStr, 'http') === 0) {
+                        $assetPath = $assetStr;
+                    } else {
+                        $assetStr = ltrim($assetStr, '/');
+                        if (str_starts_with($assetStr, 'cdn/')) {
+                            $assetPath = $assetStr;
+                        } elseif (str_starts_with($assetStr, 'modules/')) {
+                            $assetPath = $assetStr;
+                        } else {
+                            $assetPath = "modules/$slug/" . $assetStr;
+                        }
+                    }
+                    $db->prepare("INSERT INTO module_assets (module_id, type, path, load_order) VALUES (?,?,?,?)")
+                        ->execute([$moduleId, $type, $assetPath, $order++]);
+                }
+            }
+        }
 
         // Assets are now stored in modules/$slug/, no need to copy to cdn/ folder.
 
@@ -555,4 +641,121 @@ function recursiveDelete($dir)
         $file->isDir() ? rmdir($file->getRealPath()) : unlink($file->getRealPath());
     }
     rmdir($dir);
+}
+
+/**
+ * Handle Remote Installation from GitHub Marketplace
+ */
+function handleRemoteInstall(PDO $db): void
+{
+    $extractPath = null;
+    try {
+        $url = filter_input(INPUT_POST, 'url', FILTER_VALIDATE_URL);
+        $type = filter_input(INPUT_POST, 'type', FILTER_SANITIZE_SPECIAL_CHARS) ?? 'theme';
+        $name = filter_input(INPUT_POST, 'name', FILTER_SANITIZE_SPECIAL_CHARS) ?? '';
+
+        if (!$url || !$name) {
+            throw new Exception(__('missing_params'), 400);
+        }
+
+        // --- SECURITY: Domain Whitelist Check ---
+        $parsedUrl = parse_url($url);
+        $allowedHost = 'raw.githubusercontent.com';
+        if (($parsedUrl['host'] ?? '') !== $allowedHost) {
+            throw new Exception("Security Error: Domain not allowed. Only GitHub Raw is permitted.");
+        }
+
+        // 1. Download ZIP via cURL
+        $tmpFile = ROOT_DIR . '_temp/remote_' . bin2hex(random_bytes(8)) . '.zip';
+        if (!is_dir(ROOT_DIR . '_temp/')) {
+            mkdir(ROOT_DIR . '_temp/', 0755, true);
+        }
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'SpeedPage-CMS-Remote-Installer');
+        curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+        $data = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode !== 200 || !$data) {
+            throw new Exception(__('download_error') . " (HTTP $httpCode)", 400);
+        }
+
+        file_put_contents($tmpFile, $data);
+
+        // 2. Extract and Validate
+        $zip = new ZipArchive();
+        if ($zip->open($tmpFile) !== true) {
+            unlink($tmpFile);
+            throw new Exception(__('zip_error'), 400);
+        }
+
+        $isTheme = ($type === 'theme');
+        $isModule = ($type === 'module');
+        $configContent = '';
+        $jsonFile = $isTheme ? 'theme.json' : 'module.json';
+
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $zipName = $zip->getNameIndex($i);
+            if ($zipName === $jsonFile) {
+                $configContent = $zip->getFromIndex($i);
+            }
+            // Basic Path Traversal Check
+            if (strpos($zipName, '..') !== false) {
+                throw new Exception("Security Error: Path Traversal detected in ZIP");
+            }
+        }
+
+        if (!$configContent) {
+            $zip->close();
+            unlink($tmpFile);
+            throw new Exception("Configuration file ($jsonFile) not found in package.", 400);
+        }
+
+        $config = json_decode($configContent, true);
+        if (!$config) {
+            $zip->close();
+            unlink($tmpFile);
+            throw new Exception("Invalid JSON in $jsonFile", 400);
+        }
+
+        // 3. Prepare Target Directories
+        $extractPath = ROOT_DIR . "_temp/ext_" . bin2hex(random_bytes(8));
+        mkdir($extractPath, 0755, true);
+        $zip->extractTo($extractPath);
+        $zip->close();
+        unlink($tmpFile);
+
+        $slug = preg_replace('/[^a-zA-Z0-9_\-]/', '', $config['name'] ?? $name);
+        $targetDir = $isTheme ? ROOT_DIR . "themes/" . $slug : ROOT_DIR . "modules/" . $slug;
+
+        if (is_dir($targetDir)) {
+            recursiveDelete($targetDir);
+        }
+        mkdir($targetDir, 0755, true);
+
+        // 4. Move Files
+        recursiveCopy($extractPath, $targetDir);
+
+        // 5. Run Install Logic (DB etc)
+        if ($isModule) {
+            installModule($db, $slug, $config, $targetDir);
+        } else {
+            if (function_exists('sp_log'))
+                sp_log("Market teması yüklendi: $slug", "theme_market_install", null, $slug);
+            echo json_encode(["status" => "success", "message" => __('install_success')]);
+        }
+
+    } catch (Throwable $e) {
+        if (function_exists('sp_log'))
+            sp_log("Remote Install Error: " . $e->getMessage(), "system_error");
+        echo json_encode(["status" => "error", "message" => $e->getMessage()]);
+    } finally {
+        if ($extractPath && is_dir($extractPath)) {
+            recursiveDelete($extractPath);
+        }
+    }
 }

@@ -50,73 +50,134 @@ $themes = get_available_themes();
 $activeTheme = $settings['active_theme'] ?? 'default';
 ?>
 
-<div class="container">
-    <h4 class="mb-3"><i class="fas fa-palette"></i> <span lang="themes">Tema Yönetimi</span></h4>
+<div class="container pb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="mb-0 fw-bold text-primary"><i class="fas fa-palette me-2"></i> <span lang="themes">Tema
+                Yönetimi</span></h4>
+        <ul class="nav nav-pills" id="themeTab" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link active fw-bold" id="my-themes-tab" data-bs-toggle="pill"
+                    data-bs-target="#my-themes" type="button"><i class="fas fa-th-large me-1"></i> <span
+                        lang="my_themes">Temalarım</span></button>
+            </li>
+            <li class="nav-item ms-2">
+                <button class="nav-link fw-bold position-relative" id="market-tab" data-bs-toggle="pill"
+                    data-bs-target="#market" type="button" onclick="loadMarket('theme')">
+                    <i class="fas fa-shopping-cart me-1"></i> <span lang="marketplace">Market</span>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                        id="market-count" style="display:none">0</span>
+                </button>
+            </li>
+        </ul>
+    </div>
 
-    <!-- Theme Upload -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <h6 class="card-title" lang="theme_upload_zip">Tema Yükle (.zip)</h6>
-            <form id="uploadThemeForm" onsubmit="uploadTheme(event)">
-                <div class="input-group">
-                    <input type="file" class="form-control" name="module_zip" required>
-                    <button class="btn btn-outline-primary" type="submit" lang="upload">Yükle</button>
+    <div class="tab-content" id="themeTabContent">
+        <!-- My Themes Tab -->
+        <div class="tab-pane fade show active" id="my-themes" role="tabpanel">
+            <!-- Theme Upload -->
+            <div class="card shadow-sm border-0 mb-4 rounded-4">
+                <div class="card-body p-4">
+                    <h6 class="card-title fw-bold mb-3" lang="theme_upload_zip">Tema Yükle (.zip)</h6>
+                    <form id="uploadThemeForm" onsubmit="uploadTheme(event)">
+                        <div class="input-group">
+                            <input type="file" class="form-control" name="module_zip" required accept=".zip">
+                            <button class="btn btn-primary" type="submit" lang="upload">Yükle</button>
+                        </div>
+                    </form>
                 </div>
-                <small class="text-muted" lang="theme_upload_help">.zip formatında yükleyiniz.</small>
-            </form>
+            </div>
+
+            <!-- Existing Theme List Content -->
+            <!-- Theme List -->
+            <div class="row">
+                <?php foreach ($themes as $key => $t): ?>
+                    <div class="col-md-4 mb-4">
+                        <div class="card <?= ($activeTheme === $key) ? 'border-primary shadow' : '' ?> h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h5 class="card-title mb-0"><?= e($t['title'] ?? $t['name'] ?? $key) ?></h5>
+                                    <?php if ($activeTheme === $key): ?>
+                                        <span class="badge bg-primary px-2 py-1" style="font-size:0.7em"
+                                            lang="active_badge">Aktif</span>
+                                    <?php endif; ?>
+                                </div>
+                                <p class="card-text text-muted small mb-2">
+                                    v<?= e($t['version'] ?? '1.0') ?> • <?= e($t['author'] ?? 'Bilinmiyor') ?>
+                                </p>
+                                <p class="card-text small mb-4"><?= e($t['description'] ?? '') ?></p>
+
+                                <div class="d-grid gap-2">
+                                    <?php
+                                    $is_system_active = ($key === ($settings['active_theme'] ?? 'default'));
+                                    if (!$is_system_active): ?>
+                                        <button class="btn btn-sm btn-outline-success" onclick="activateTheme('<?= e($key) ?>')"
+                                            lang="activate">Aktifleştir</button>
+                                    <?php else: ?>
+                                        <button class="btn btn-sm btn-success" disabled>
+                                            <i class="fas fa-check-circle me-1"></i> <span
+                                                lang="currently_using">Kullanılıyor</span>
+                                        </button>
+                                    <?php endif; ?>
+
+                                    <?php if (!empty($t['has_settings'])): ?>
+                                        <a href="index.php?page=theme-settings&t=<?= e($key) ?>"
+                                            class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-cog me-1"></i> <span lang="settings">Ayarlar</span>
+                                        </a>
+                                    <?php endif; ?>
+
+                                    <?php if ($key === 'default'): ?>
+                                        <button class="btn btn-sm btn-outline-info" onclick="copyTheme('<?= e($key) ?>')">
+                                            <i class="fas fa-copy me-1"></i> <span lang="copy_default">Varsayılanı
+                                                Kopyala</span>
+                                        </button>
+                                    <?php else: ?>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="deleteTheme('<?= e($key) ?>')">
+                                            <i class="fas fa-trash-alt me-1"></i> <span lang="delete">Sil</span>
+                                        </button>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
         </div>
     </div>
 
-    <!-- Theme List -->
-    <div class="row">
-        <?php foreach ($themes as $key => $t): ?>
-            <div class="col-md-4 mb-4">
-                <div class="card <?= ($activeTheme === $key) ? 'border-primary shadow' : '' ?> h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-2">
-                            <h5 class="card-title mb-0"><?= e($t['title'] ?? $t['name'] ?? $key) ?></h5>
-                            <?php if ($activeTheme === $key): ?>
-                                <span class="badge bg-primary px-2 py-1" style="font-size:0.7em"
-                                    lang="active_badge">Aktif</span>
-                            <?php endif; ?>
+    <!-- Market Tab -->
+    <div class="tab-pane fade" id="market" role="tabpanel">
+        <div class="card shadow-sm border-0 mb-4 rounded-4">
+            <div class="card-body p-4">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-end-0"><i
+                                    class="fas fa-search text-muted"></i></span>
+                            <input type="text" id="marketSearch" class="form-control border-start-0 ps-0"
+                                placeholder="<?= e(__('search_market')) ?>" onkeyup="filterMarket('theme')">
                         </div>
-                        <p class="card-text text-muted small mb-2">
-                            v<?= e($t['version'] ?? '1.0') ?> • <?= e($t['author'] ?? 'Bilinmiyor') ?>
-                        </p>
-                        <p class="card-text small mb-4"><?= e($t['description'] ?? '') ?></p>
-
-                        <div class="d-grid gap-2">
-                            <?php
-                            $is_system_active = ($key === ($settings['active_theme'] ?? 'default'));
-                            if (!$is_system_active): ?>
-                                <button class="btn btn-sm btn-outline-success" onclick="activateTheme('<?= e($key) ?>')"
-                                    lang="activate">Aktifleştir</button>
-                            <?php else: ?>
-                                <button class="btn btn-sm btn-success" disabled>
-                                    <i class="fas fa-check-circle me-1"></i> <span lang="currently_using">Kullanılıyor</span>
-                                </button>
-                            <?php endif; ?>
-
-                            <?php if (!empty($t['has_settings'])): ?>
-                                <a href="index.php?page=theme-settings&t=<?= e($key) ?>" class="btn btn-sm btn-outline-primary">
-                                    <i class="fas fa-cog me-1"></i> <span lang="settings">Ayarlar</span>
-                                </a>
-                            <?php endif; ?>
-
-                            <?php if ($key === 'default'): ?>
-                                <button class="btn btn-sm btn-outline-info" onclick="copyTheme('<?= e($key) ?>')">
-                                    <i class="fas fa-copy me-1"></i> <span lang="copy_default">Varsayılanı Kopyala</span>
-                                </button>
-                            <?php else: ?>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteTheme('<?= e($key) ?>')">
-                                    <i class="fas fa-trash-alt me-1"></i> <span lang="delete">Sil</span>
-                                </button>
-                            <?php endif; ?>
-                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <select id="filterAuthor" class="form-select" onchange="filterMarket('theme')">
+                            <option value="all" lang="all">Tüm Yazarlar</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select id="filterSort" class="form-select" onchange="filterMarket('theme')">
+                            <option value="newest" lang="newest">En Yeni</option>
+                            <option value="featured" lang="featured">Öne Çıkan</option>
+                        </select>
                     </div>
                 </div>
             </div>
-        <?php endforeach; ?>
+        </div>
+
+        <div id="market-list" class="row">
+            <div class="col-12 text-center py-5">
+                <div class="spinner-border text-primary" role="status"></div>
+            </div>
+        </div>
     </div>
 </div>
 

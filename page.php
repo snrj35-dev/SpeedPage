@@ -14,6 +14,11 @@ require_once __DIR__ . "/admin/db.php";
 /** @var PDO $db */
 global $db;
 
+// 🚀 Load Module Hooks
+if (function_exists('sp_load_module_hooks')) {
+    sp_load_module_hooks();
+}
+
 $response = [
     "ok" => false,
     "html" => "",

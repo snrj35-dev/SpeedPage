@@ -17,7 +17,7 @@ if (isset($is_admin) && !$is_admin) {
     <div class="col-md-9 d-flex flex-column h-100" style="min-height: calc(100vh - 120px);">
         <div class="card shadow-sm flex-grow-1 d-flex flex-column m-2 rounded-4 overflow-hidden border-0">
             <!-- Header -->
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
+            <div class="card-header  py-3 d-flex justify-content-between align-items-center border-bottom">
                 <div class="d-flex align-items-center">
                     <div class="icon-square bg-primary-subtle text-primary me-3 rounded-3 d-flex align-items-center justify-content-center"
                         style="width:40px;height:40px;">
@@ -50,7 +50,7 @@ if (isset($is_admin) && !$is_admin) {
                 </div>
 
                 <!-- Input Area -->
-                <div class="p-3 bg-white border-top">
+                <div class="p-3 border-top">
                     <div id="selected-files-badges" class="mb-2 d-none d-flex gap-2 flex-wrap"></div>
 
                     <div class="input-group shadow-sm rounded-3">
@@ -81,7 +81,7 @@ if (isset($is_admin) && !$is_admin) {
 
             <!-- Settings Card -->
             <div class="card shadow-sm border-0 rounded-4">
-                <div class="card-header bg-white border-0 fw-bold py-3">
+                <div class="card-header border-0 fw-bold py-3">
                     <i class="fas fa-cogs me-2 text-secondary"></i> <span
                         lang="ai_settings"><?= __('ai_settings') ?></span>
                 </div>
@@ -116,8 +116,7 @@ if (isset($is_admin) && !$is_admin) {
 
             <!-- File Explorer Card -->
             <div class="card shadow-sm border-0 flex-grow-1 rounded-4 overflow-hidden" style="min-height: 300px;">
-                <div
-                    class="card-header bg-white border-0 fw-bold py-3 d-flex justify-content-between align-items-center">
+                <div class="card-header border-0 fw-bold py-3 d-flex justify-content-between align-items-center">
                     <span><i class="fas fa-folder me-2 text-warning"></i> <span
                             lang="ai_files"><?= __('ai_files') ?></span></span>
                     <button class="btn btn-sm btn-light text-primary rounded-circle" id="btn-refresh-files"
@@ -167,12 +166,12 @@ if (isset($is_admin) && !$is_admin) {
             </div>
             <div class="modal-body">
                 <input type="hidden" id="edit-provider-key">
-                
+
                 <div class="mb-3">
                     <label class="form-label small fw-bold">API Key</label>
                     <input type="password" class="form-control" id="edit-api-key">
                 </div>
-                
+
                 <div class="form-check form-switch mb-3">
                     <input class="form-check-input" type="checkbox" id="edit-is-enabled">
                     <label class="form-check-label" for="edit-is-enabled">Bu Sağlayıcıyı Aktif Et</label>
@@ -180,10 +179,11 @@ if (isset($is_admin) && !$is_admin) {
 
                 <hr>
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                     <h6 class="fw-bold m-0">Modeller</h6>
-                     <button class="btn btn-xs btn-outline-success" id="btn-add-model-row"><i class="fas fa-plus"></i></button>
+                    <h6 class="fw-bold m-0">Modeller</h6>
+                    <button class="btn btn-xs btn-outline-success" id="btn-add-model-row"><i
+                            class="fas fa-plus"></i></button>
                 </div>
-               
+
                 <div id="edit-model-list" class="d-flex flex-column gap-2" style="max-height: 200px; overflow-y: auto;">
                     <!-- JS Injected -->
                 </div>

@@ -25,8 +25,8 @@ set_exception_handler('sp_exception_handler');
 // 1. URL Tabanlı Ayarlar (Tarayıcı için)
 // ---------------------------------------------
 
-define('BASE_PATH', '/');
-define('BASE_URL', 'http://localhost' . BASE_PATH);
+define('BASE_PATH', '/new/');
+define('BASE_URL', 'http://osman.center' . BASE_PATH);
 define('CDN_URL', BASE_URL . 'cdn/');
 
 // ---------------------------------------------
@@ -102,6 +102,5 @@ if (!function_exists('__')) {
 		return (string) $text;
 	}
 }
-
 
 

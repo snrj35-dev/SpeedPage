@@ -667,3 +667,83 @@ $jsFiles = glob(__DIR__ . '/../cdn/js/*.js') ?: [];
         </div>
     </div>
 </div>
+
+<script>
+// Sortable.js ile Menü Sıralaması
+document.addEventListener('DOMContentLoaded', function() {
+    const menuTableBody = document.getElementById('menuTableBody');
+    
+    if (menuTableBody && typeof Sortable !== 'undefined') {
+        const sortable = new Sortable(menuTableBody, {
+            animation: 150,
+            handle: '.menu-row', // Tüm satır sürüklenebilir
+            ghostClass: 'sortable-ghost',
+            dragClass: 'sortable-drag',
+            onEnd: function(evt) {
+                // Sıralama değiştiğinde
+                const menuIds = [];
+                const rows = menuTableBody.querySelectorAll('.menu-row');
+                
+                rows.forEach((row, index) => {
+                    const menuId = row.getAttribute('data-id');
+                    menuIds.push({
+                        id: menuId,
+                        order: index + 1
+                    });
+                });
+                
+                // AJAX ile sıralamayı kaydet
+                fetch('page-actions.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        mode: 'reorder_menus',
+                        csrf: '<?= $_SESSION['csrf'] ?>',
+                        menus: menuIds
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.ok) {
+                        // Başarılı - görsel feedback
+                        evt.item.style.backgroundColor = '#d4edda';
+                        setTimeout(() => {
+                            evt.item.style.backgroundColor = '';
+                        }, 500);
+                    } else {
+                        console.error('Sıralama kaydedilemedi:', data.error);
+                        alert(t('error_occurred') || 'Hata oluştu!');
+                    }
+                })
+                .catch(error => {
+                    console.error('AJAX hatası:', error);
+                    alert(t('error_occurred') || 'Bağlantı hatası!');
+                });
+            }
+        });
+        
+        // Sürüklenirken görsel efektler için CSS
+        const style = document.createElement('style');
+        style.textContent = `
+            .sortable-ghost {
+                opacity: 0.4;
+                background-color: #f8f9fa;
+            }
+            .sortable-drag {
+                cursor: move;
+            }
+            #menuTableBody .menu-row {
+                cursor: move;
+            }
+            #menuTableBody .menu-row:hover {
+                background-color: #f8f9fa;
+            }
+        `;
+        document.head.appendChild(style);
+    } else {
+        console.warn('Sortable.js yüklenmedi veya menuTableBody bulunamadı!');
+    }
+});
+</script>

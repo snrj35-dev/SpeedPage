@@ -5,6 +5,32 @@ declare(strict_types=1);
 $hooks = [];
 
 /**
+ * Automatically load hooks.php from all active modules
+ */
+function sp_load_module_hooks(): void
+{
+    global $db;
+    if (!$db)
+        return;
+
+    try {
+        $stmt = $db->query("SELECT name FROM modules WHERE is_active = 1");
+        $activeModules = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($activeModules as $m) {
+            $hookFile = ROOT_DIR . "modules/" . $m['name'] . "/hooks.php";
+            if (file_exists($hookFile)) {
+                include_once $hookFile;
+            }
+        }
+    } catch (Throwable $e) {
+        if (function_exists('sp_log')) {
+            sp_log("Module hook loading error: " . $e->getMessage(), "system_error");
+        }
+    }
+}
+
+/**
  * Add a new hook listener
  *
  * @param string   $tag       Hook location/name (e.g. 'head_start')
@@ -117,110 +143,110 @@ add_hook('footer_end', function () {
     $confirmMsg = function_exists('__') ? __('ai_confirm_msg', 'Sistem hatası/özeti yakalandı. AI Paneline aktarılsın mı?') : 'Sistem hatası/özeti yakalandı. AI Paneline aktarılsın mı?';
 
     ?>
-    <style>
-        #ai-bug-reporter-btn {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 999999;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: #0d6efd;
-            color: white;
-            border: 4px solid #fff;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-
-        #ai-bug-reporter-btn:hover {
-            transform: scale(1.1) rotate(15deg);
-            background: #0b5ed7;
-        }
-
-        .critical-error-pulse {
-            animation: pulse-red 2s infinite;
-            background: #dc3545 !important;
-        }
-
-        @keyframes pulse-red {
-            0% {
-                box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+        <style>
+            #ai-bug-reporter-btn {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                z-index: 999999;
+                width: 60px;
+                height: 60px;
+                border-radius: 50%;
+                background: #0d6efd;
+                color: white;
+                border: 4px solid #fff;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             }
 
-            70% {
-                box-shadow: 0 0 0 15px rgba(220, 53, 69, 0);
+            #ai-bug-reporter-btn:hover {
+                transform: scale(1.1) rotate(15deg);
+                background: #0b5ed7;
             }
 
-            100% {
-                box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
+            .critical-error-pulse {
+                animation: pulse-red 2s infinite;
+                background: #dc3545 !important;
             }
-        }
-    </style>
 
-    <div id="ai-bug-reporter-btn" title="<?php echo htmlspecialchars($title); ?>">
-        <i class="fas fa-robot fa-lg"></i>
-    </div>
+            @keyframes pulse-red {
+                0% {
+                    box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+                }
 
-    <script>
-        (function () {
-            const btn = document.getElementById('ai-bug-reporter-btn');
-            if (!btn) return;
+                70% {
+                    box-shadow: 0 0 0 15px rgba(220, 53, 69, 0);
+                }
 
-            const ADMIN_URL = '<?= $adminUrl ?>';
-            const TITLES = {
-                jsError: "<?= htmlspecialchars($jsErrorTitle) ?>",
-                criticalError: "<?= htmlspecialchars($criticalErrorTitle) ?>",
-                confirm: "<?= htmlspecialchars($confirmMsg) ?>"
-            };
+                100% {
+                    box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
+                }
+            }
+        </style>
 
-            // 1. Catch JS Errors
-            if (!window.aiConsoleErrors) window.aiConsoleErrors = [];
-            window.addEventListener('error', function (e) {
-                window.aiConsoleErrors.push({
-                    message: e.message,
-                    file: e.filename,
-                    line: e.lineno,
-                    col: e.colno,
-                    stack: e.error ? e.error.stack : ''
-                });
-                btn.classList.add('critical-error-pulse');
-                btn.title = TITLES.jsError;
-            });
+        <div id="ai-bug-reporter-btn" title="<?php echo htmlspecialchars($title); ?>">
+            <i class="fas fa-robot fa-lg"></i>
+        </div>
 
-            // 2. Click Event
-            btn.addEventListener('click', function () {
-                const reportData = {
-                    url: window.location.href,
-                    html_summary: document.body ? document.body.innerText.substring(0, 5000) : 'Body unreadable',
-                    errors: window.aiConsoleErrors,
-                    timestamp: new Date().toISOString()
+        <script>
+            (function () {
+                const btn = document.getElementById('ai-bug-reporter-btn');
+                if (!btn) return;
+
+                const ADMIN_URL = '<?= $adminUrl ?>';
+                const TITLES = {
+                    jsError: "<?= htmlspecialchars($jsErrorTitle) ?>",
+                    criticalError: "<?= htmlspecialchars($criticalErrorTitle) ?>",
+                    confirm: "<?= htmlspecialchars($confirmMsg) ?>"
                 };
 
-                localStorage.setItem('ai_bug_report', JSON.stringify(reportData));
+                // 1. Catch JS Errors
+                if (!window.aiConsoleErrors) window.aiConsoleErrors = [];
+                window.addEventListener('error', function (e) {
+                    window.aiConsoleErrors.push({
+                        message: e.message,
+                        file: e.filename,
+                        line: e.lineno,
+                        col: e.colno,
+                        stack: e.error ? e.error.stack : ''
+                    });
+                    btn.classList.add('critical-error-pulse');
+                    btn.title = TITLES.jsError;
+                });
 
-                if (confirm(TITLES.confirm)) {
-                    window.location.href = ADMIN_URL;
-                }
-            });
+                // 2. Click Event
+                btn.addEventListener('click', function () {
+                    const reportData = {
+                        url: window.location.href,
+                        html_summary: document.body ? document.body.innerText.substring(0, 5000) : 'Body unreadable',
+                        errors: window.aiConsoleErrors,
+                        timestamp: new Date().toISOString()
+                    };
 
-            // 3. Smart White Screen Check (delayed)
-            window.addEventListener('load', function () {
-                setTimeout(() => {
-                    const textLength = document.body ? document.body.innerText.trim().length : 0;
-                    // If page is less than 50 chars and no JS errors, turn red
-                    if (textLength < 50 && window.aiConsoleErrors.length === 0) {
-                        btn.classList.add('critical-error-pulse');
-                        btn.title = TITLES.criticalError;
+                    localStorage.setItem('ai_bug_report', JSON.stringify(reportData));
+
+                    if (confirm(TITLES.confirm)) {
+                        window.location.href = ADMIN_URL;
                     }
-                }, 1000); // 1 second delay
-            });
-        })();
-    </script>
-    <?php
+                });
+
+                // 3. Smart White Screen Check (delayed)
+                window.addEventListener('load', function () {
+                    setTimeout(() => {
+                        const textLength = document.body ? document.body.innerText.trim().length : 0;
+                        // If page is less than 50 chars and no JS errors, turn red
+                        if (textLength < 50 && window.aiConsoleErrors.length === 0) {
+                            btn.classList.add('critical-error-pulse');
+                            btn.title = TITLES.criticalError;
+                        }
+                    }, 1000); // 1 second delay
+                });
+            })();
+        </script>
+        <?php
 });
 ?>
