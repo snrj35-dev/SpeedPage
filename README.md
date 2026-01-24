@@ -23,7 +23,7 @@ Goal: To provide developers with a clean working environment through fast setup,
 
     Security: Delete install.php after the "Success" message.
 
-🚀 Key Updates (v0.2 Alpha - Installer Edition)
+🚀 Key Updates (v0.3 Alpha - Installer Edition)
 🛠️ Universal Installer
 
     Agnostic DB Support: Switch between SQLite and MySQL with a single click.

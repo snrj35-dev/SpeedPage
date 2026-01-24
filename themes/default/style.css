@@ -49,7 +49,7 @@
   --bs-danger-text-emphasis: #5c0f10;
   --bs-light-text-emphasis: #7b8ab8;
   --bs-dark-text-emphasis: #7b8ab8;
-  --bs-primary-bg-subtle: #d7e8fe;
+  --bs-primary-bg-subtle: #09203f;
   --bs-secondary-bg-subtle: #f7f9fc;
   --bs-success-bg-subtle: #d9f5d4;
   --bs-info-bg-subtle: #dee0fd;
@@ -77,7 +77,7 @@
   --bs-body-color: #7b8ab8;
   --bs-body-color-rgb: 123, 138, 184;
   --bs-body-bg: #d9e3f1;
-  --navbar-bg: #9b9b9b;
+  --navbar-bg: #ececec;
   --bs-body-bg-rgb: 217, 227, 241;
   --bs-emphasis-color: #000;
   --bs-emphasis-color-rgb: 0, 0, 0;
@@ -1089,7 +1089,7 @@ body {
 [data-theme=dark] .card,
 [data-theme=dark] .list-group {
   background-color: #202428;
-  box-shadow: inset 2px 2px 6px rgba(17, 19, 21, 0.2), inset -3px -2px 4px rgba(255, 255, 255, 0.05);
+  box-shadow: inset 2px 2px 6px rgba(17, 19, 21, 0.2), inset -3px -2px 4px rgba(255, 255, 255, 0.05) !important;
 }
 
 [data-theme=dark] .card.bg-secondary,
@@ -1101,7 +1101,7 @@ body {
 [data-theme=dark] .popover,
 [data-theme=dark] .toast {
   background-color: #282c2f;
-  box-shadow: 8px 8px 40px rgba(0, 0, 0, 0.15), inset 1px 1px 3px rgba(255, 255, 255, 0.05), inset -5px -5px 20px rgba(0, 0, 0, 0.05);
+  box-shadow: 8px 8px 40px rgba(0, 0, 0, 0.15), inset 1px 1px 3px rgba(255, 255, 255, 0.05), inset -5px -5px 20px rgba(0, 0, 0, 0.05) !important;
 }
 
 [data-theme=dark] .popover-header,

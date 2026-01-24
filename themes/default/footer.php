@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Default Theme Footer
  */
@@ -17,8 +18,8 @@ $active_cols = array_filter($footer_cols, function ($col) {
 
 $logo = trim($settings['logo_url'] ?? '');
 $siteName = trim($settings['site_name'] ?? 'SpeedPage');
-$footerText = get_theme_setting('footer_text', 'Designed and built with all the love in the world by the SpeedPage team.');
-$copyright = get_theme_setting('footer_copyright', '© 2026 SpeedPage');
+$footerText = get_theme_setting('footer_text', __('footer_text_default'));
+$copyright = get_theme_setting('footer_copyright', __('copyright_default'));
 
 // Sütun genişliğini aktif sütun sayısına göre ayarla (Maksimum 4 aktif sütun + 1 logo sütunu)
 $col_count = count($active_cols);
