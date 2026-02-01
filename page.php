@@ -4,17 +4,13 @@ declare(strict_types=1);
 // SpeedPage SPA API Layer
 header("Content-Type: application/json; charset=utf-8");
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
 require_once __DIR__ . "/settings.php";
 require_once __DIR__ . "/admin/db.php";
 
 /** @var PDO $db */
 global $db;
 
-// 🚀 Load Module Hooks
+//  Load Module Hooks
 if (function_exists('sp_load_module_hooks')) {
     sp_load_module_hooks();
 }
@@ -22,7 +18,8 @@ if (function_exists('sp_load_module_hooks')) {
 $response = [
     "ok" => false,
     "html" => "",
-    "assets" => ["css" => [], "js" => []]
+    "assets" => ["css" => [], "js" => []],
+    "translations" => []
 ];
 
 try {
@@ -30,6 +27,9 @@ try {
     if (!$db) {
         throw new RuntimeException("db_connection_error");
     }
+
+    // Force clean buffer before JSON output
+    if (ob_get_length()) ob_clean();
 
     // Load dynamic settings
     $settingsStmt = $db->query("SELECT `key`, `value` FROM settings");
@@ -68,11 +68,12 @@ try {
             $rawContent = $pageRow['content'];
 
             // Secure PHP Execution: Write to temp file and include
-            $tempDir = ROOT_DIR . 'admin/_temp/';
+            $tempDir = TEMP_DIR;
             if (!is_dir($tempDir)) {
                 mkdir($tempDir, 0755, true);
-                file_put_contents($tempDir . '.htaccess', "Deny from all");
-                file_put_contents($tempDir . 'index.html', "");
+                if (file_exists(STORAGE_DIR)) {
+                     file_put_contents(STORAGE_DIR . '.htaccess', "Deny from all");
+                }
             }
             $tempFile = $tempDir . 'page_' . $slug . '_' . md5($rawContent) . '.php';
 
@@ -103,7 +104,14 @@ try {
         foreach ($moduleFiles as $mFile) {
             if (file_exists($mFile)) {
                 ob_start();
-                include $mFile;
+                try {
+                    include $mFile;
+                } catch (Throwable $e) {
+                    echo "<div class='alert alert-danger'>
+                        <strong>Module Error:</strong> " . htmlspecialchars($e->getMessage()) . "<br>
+                        <small>File: " . htmlspecialchars($e->getFile()) . " (" . $e->getLine() . ")</small>
+                    </div>";
+                }
                 $content = ob_get_clean();
                 $found = true;
                 break;
@@ -155,6 +163,42 @@ try {
         }
     }
 
+    // 4b. Module Frontend Assets (Dynamic) & Permission Check
+    // Check if this slug belongs to a module
+    $stmtMod = $db->prepare("SELECT id, permissions FROM modules WHERE page_slug = ? AND is_active = 1");
+    $stmtMod->execute([$slug]);
+    $modRow = $stmtMod->fetch(PDO::FETCH_ASSOC);
+
+    if ($modRow) {
+        $modID = $modRow['id'];
+        
+        // --- PERMISSION CHECK ---
+        $perms = $modRow['permissions'] ? json_decode($modRow['permissions'], true) : [];
+        if (!empty($perms)) {
+            $userRole = $_SESSION['role'] ?? 'guest';
+            if (!in_array($userRole, $perms)) {
+                // Access Denied
+                $response['ok'] = false;
+                $response['html'] = "<div class='alert alert-danger shadow-sm rounded-4 py-4 text-center'>
+                    <i class='fas fa-lock fs-1 mb-3 text-danger'></i>
+                    <h4 class='fw-bold'>" . __('access_denied') . "</h4>
+                    <p class='text-muted'>" . __('module_permission_error') . "</p>
+                </div>";
+                echo json_encode($response);
+                exit;
+            }
+        }
+        $stmtMA = $db->prepare("SELECT type, path FROM module_assets 
+                                WHERE module_id = ? AND location = 'frontend' 
+                                ORDER BY load_order ASC");
+        $stmtMA->execute([$modID]);
+        $maRows = $stmtMA->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($maRows as $ma) {
+             $response['assets'][$ma['type']][] = $ma['path'] . '?v=' . APP_VERSION;
+        }
+    }
+
     // 5. Final Output Filter
     if (function_exists('run_hook')) {
         $content = (string) run_hook('content_filter', $content);
@@ -162,6 +206,7 @@ try {
 
     $response['ok'] = true;
     $response['html'] = $content;
+    $response['translations'] = $translations ?? [];
 
 } catch (Throwable $e) {
     if (function_exists('sp_log')) {

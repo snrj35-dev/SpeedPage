@@ -3,13 +3,26 @@ declare(strict_types=1);
 
 // index.php en üst kısım
 // 1. Veritabanı dosyası YOKSA ve kurulum dosyası VARSA kuruluma yönlendir
-if (!file_exists(__DIR__ . '/admin/veritabanı/data.db')) {
+if (!file_exists(__DIR__ . '/admin/_internal_storage/data_secure/data.db')) {
     if (file_exists(__DIR__ . '/install.php')) {
         header("Location: install.php");
         exit;
     } else {
-        // Hem veritabanı yok hem install.php silinmişse kullanıcıya bir uyarı gösterilebilir
-        die("Sistem kurulu değil ve kurulum dosyası (install.php) bulunamadı. Lütfen dosyaları kontrol edin.");
+        // Hem veritabanı yok hem install.php silinmişse kullanıcıya bir uyarı göster
+        http_response_code(500);
+        ?>
+        <!DOCTYPE html>
+        <html lang="tr">
+        <head><meta charset="UTF-8"><title>Sistem Hatası</title><link rel="stylesheet" href="cdn/css/bootstrap.min.css"></head>
+        <body class="bg-light d-flex align-items-center justify-content-center" style="height: 100vh;">
+            <div class="alert alert-danger shadow-sm py-4 px-5 rounded-4">
+                <h4 class="fw-bold">Sistem Kurulu Değil</h4>
+                <p class="mb-0">Veritabanı ve kurulum dosyası (install.php) bulunamadı. Lütfen dosyaları kontrol edin.</p>
+            </div>
+        </body>
+        </html>
+        <?php
+        exit;
     }
 }
 
@@ -23,6 +36,24 @@ global $db;
 if (function_exists('sp_load_module_hooks')) {
     sp_load_module_hooks();
 }
+
+// 📦 Fetch Global Module Assets
+$globalAssets = ['css' => [], 'js' => []];
+try {
+    $stmtG = $db->query("SELECT ma.type, ma.path FROM module_assets ma 
+                         JOIN modules m ON ma.module_id = m.id 
+                         WHERE m.is_active = 1 AND ma.location = 'global' 
+                         ORDER BY ma.load_order ASC");
+    $gRaw = $stmtG->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($gRaw as $gr) {
+        $path = $gr['path'];
+        // Path logic (same as other places)
+        if (!str_starts_with($path, 'http')) {
+            $path = BASE_URL . $path . '?v=' . APP_VERSION;
+        }
+        $globalAssets[$gr['type']][] = $path;
+    }
+} catch (Throwable $e) { }
 
 // Load Settings
 $stmt = $db->query("SELECT `key`, `value` FROM settings");
@@ -38,10 +69,6 @@ if (isset($settings['site_protocol']) && !empty($_SERVER['HTTP_HOST'])) {
         header("Location: " . $expected_proto . "://" . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI']);
         exit;
     }
-}
-
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
 }
 
 // Enable errors for admin
@@ -89,49 +116,10 @@ $metaDesc = $settings['meta_description'] ?? '';
 $metaKeys = $settings['meta_keywords'] ?? '';
 
 ?>
-<!DOCTYPE html>
-<html lang="<?= htmlspecialchars($settings['default_lang'] ?? 'tr') ?>">
+<?php
+load_theme_part('header');
+?>
 
-<head>
-    <?php if (function_exists('run_hook'))
-        run_hook('head_start'); ?>
-    <script>
-        // Immediate theme check
-        (function () {
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.setAttribute('data-theme', 'dark');
-            }
-        })();
-        const DEFAULT_SITE_LANG = "<?= htmlspecialchars($settings['default_lang'] ?? 'tr') ?>";
-        let BASE_PATH = '<?= BASE_PATH ?>';
-        if (!BASE_PATH.endsWith('/')) BASE_PATH += '/';
-        const BASE_URL = "<?= BASE_URL ?>";
-        const FRIENDLY_URL = "<?= $settings['friendly_url'] ?? '0' ?>"; // Critical for Router.js
-    </script>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="<?= htmlspecialchars($metaDesc) ?>">
-    <title><?= htmlspecialchars($pageTitle . ($siteSlogan ? ' - ' . $siteSlogan : '')) ?></title>
-    <meta name="keywords" content="<?= htmlspecialchars($metaKeys) ?>">
-    <link rel="stylesheet" href="<?= CDN_URL ?>css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= CDN_URL ?>css/all.min.css">
-    <!-- Frontend Core CSS Removed - Using Theme CSS -->
-    <?php
-    // Theme CSS
-    $themeCss = "themes/" . ACTIVE_THEME . "/style.css";
-    if (file_exists(ROOT_DIR . $themeCss)) {
-        echo '<link rel="stylesheet" href="' . BASE_URL . $themeCss . '?v=' . filemtime(ROOT_DIR . $themeCss) . '">';
-    }
-    ?>
-    <link rel="icon" href="favicon.ico">
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#121212">
-    <?php if (function_exists('run_hook'))
-        run_hook('head_end'); ?>
-</head>
-
-<body>
 
     <?php if (file_exists(__DIR__ . '/install.php')): ?>
         <div
@@ -205,22 +193,3 @@ $metaKeys = $settings['meta_keywords'] ?? '';
         run_hook('after_footer'); ?>
     <?php if (function_exists('run_hook'))
         run_hook('footer_end'); ?>
-
-    <script src="<?= CDN_URL ?>js/router.js"></script>
-    <script src="<?= CDN_URL ?>js/bootstrap.bundle.min.js"></script>
-    <?php if (ACTIVE_THEME !== 'fantastik'): ?>
-        <script src="<?= CDN_URL ?>js/dark.js"></script>
-    <?php endif; ?>
-    <script src="<?= CDN_URL ?>js/lang.js"></script>
-
-    <script>
-        if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.register("<?= BASE_PATH ?>service-worker.js")
-                .then(() => console.log("PWA Active ✔️"))
-                .catch(err => console.log("SW Error:", err));
-        }
-    </script>
-
-</body>
-
-</html>

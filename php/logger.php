@@ -16,7 +16,7 @@ if (!function_exists('sp_log')) {
         }
 
         if (!$db) {
-            $db_file = __DIR__ . '/../admin/veritabanı/data.db';
+            $db_file = defined('DB_PATH') ? DB_PATH : __DIR__ . '/../admin/_internal_storage/data_secure/data.db';
             if (file_exists($db_file)) {
                 try {
                     $db = new PDO("sqlite:" . $db_file);

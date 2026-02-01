@@ -1,25 +1,35 @@
 const content = document.getElementById("page-content");
 const loader = document.getElementById("page-loader");
+
 // Dinamik URL oluşturucu (Ayara göre link formatını belirler)
 function getUrl(page) {
     if (typeof FRIENDLY_URL !== 'undefined' && FRIENDLY_URL === "1") {
-        // Eğer panelden Friendly URL aktifse: /new/home
         return BASE_PATH + page;
     } else {
-        // Kapalıysa veya .htaccess yoksa: /new/?page=home
         return BASE_PATH + "?page=" + page;
     }
 }
+
 function loadPage(page = "home", push = true) {
+    if (!loader || !content) return; // Router pasifse işlem yapma
+
     loader.classList.remove("d-none");
 
-    // ✅ Hash (#) varsa ayıkla, sunucuya sadece temiz slug gönder
     const [cleanSlug, hash] = page.split('#');
 
     fetch(`page.php?page=${cleanSlug}`)
         .then(res => res.json())
         .then(data => {
             content.innerHTML = data.html;
+
+            // ✅ SPA Language Sync: Merge and update translations
+            if (data.translations && typeof window.lang !== 'undefined') {
+                window.lang = { ...window.lang, ...data.translations };
+                if (typeof updateContent === 'function') {
+                    updateContent(window.lang);
+                }
+            }
+
             injectAssets(data.assets);
             loader.classList.add("d-none");
 
@@ -27,7 +37,6 @@ function loadPage(page = "home", push = true) {
                 history.pushState({ page }, "", getUrl(page));
             }
 
-            // ✅ Sayfa yüklendikten sonra odaklanma (Hash varsa)
             const targetHash = hash ? '#' + hash : window.location.hash;
             if (targetHash && targetHash.length > 1) {
                 setTimeout(() => {
@@ -43,34 +52,30 @@ function loadPage(page = "home", push = true) {
             loader.classList.add("d-none");
         });
 }
+
 window.addEventListener("DOMContentLoaded", () => {
+    if (!loader || !content) return; // Router pasifse başlatma
+
     const currentPath = window.location.pathname;
     const urlParams = new URLSearchParams(window.location.search);
     let initialPage = "home";
     let fullParams = window.location.search;
 
-    // 1. ÖNCE: URL'de ?page= var mı bak
     if (urlParams.has("page")) {
         initialPage = urlParams.get("page");
-    }
-    // 2. SONRA: Eğer Friendly URL aktifse path'den yakala
-    else if (typeof FRIENDLY_URL !== 'undefined' && FRIENDLY_URL === "1") {
+    } else if (typeof FRIENDLY_URL !== 'undefined' && FRIENDLY_URL === "1") {
         const cleanPath = currentPath.replace(BASE_PATH, "").replace(/^\/+|\/+$/g, "");
         if (cleanPath !== "" && cleanPath !== "index.php") {
             initialPage = cleanPath;
-            fullParams = ""; // Friendly URL case,params are in path usually
+            fullParams = "";
         }
     }
 
-    // Yakalanan sayfayı yükle (Parametreleri koruyarak)
     const target = fullParams ? initialPage + fullParams.replace('?page=' + initialPage, '').replace('page=' + initialPage, '') : initialPage;
-
-    // Eğer URL'de halihazırda bir hash varsa koru
     const finalTarget = (target + window.location.hash).replace('?&', '?').replace('&&', '&').replace(/\?$/, '');
 
     loadPage(finalTarget, false);
 
-    // Eğer hash varsa (ancor), içerik yüklendikten sonra oraya kaydır
     if (window.location.hash) {
         setTimeout(() => {
             const el = document.querySelector(window.location.hash);
@@ -78,26 +83,23 @@ window.addEventListener("DOMContentLoaded", () => {
         }, 800);
     }
 });
+
 window.addEventListener("popstate", e => {
     if (e.state?.page) loadPage(e.state.page, false);
 });
 
 document.addEventListener("click", e => {
     const link = e.target.closest("[data-page]");
-    if (!link) return;
+    if (!link || !loader || !content) return;
 
     e.preventDefault();
-    const targetPage = link.dataset.page;
     loadPage(link.dataset.page);
 });
-
 
 let loadedJS = new Set();
 let loadedCSS = new Set();
 
 function injectAssets(assets) {
-
-    // ✅ CSS dosyaları
     (assets.css || []).forEach(css => {
         let finalPath = (css.includes('modules/') || css.includes('themes/') || css.includes('http'))
             ? css
@@ -116,7 +118,6 @@ function injectAssets(assets) {
         document.head.appendChild(link);
     });
 
-    // ✅ JS dosyaları
     (assets.js || []).forEach(js => {
         let finalPath = (js.includes('modules/') || js.includes('themes/') || js.includes('http'))
             ? js

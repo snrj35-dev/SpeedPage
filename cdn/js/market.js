@@ -108,9 +108,11 @@ function installRemote(url, type, name) {
     fd.append('url', url);
     fd.append('type', type);
     fd.append('name', name);
-    fd.append('csrf', typeof csrfToken !== 'undefined' ? csrfToken : '');
+    fd.append('csrf', typeof CSRF_TOKEN !== 'undefined' ? CSRF_TOKEN : '');
 
-    fetch('modul-func.php', { method: 'POST', body: fd })
+    const targetFunc = type === 'theme' ? 'theme-func.php' : 'modul-func.php';
+
+    fetch(targetFunc, { method: 'POST', body: fd })
         .then(r => r.json())
         .then(res => {
             if (res.status === 'success') {

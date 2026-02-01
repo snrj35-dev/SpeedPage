@@ -84,6 +84,15 @@ add_hook('before_footer', function () {
 
 // 6. Footer System Info Hook
 add_hook('footer_end', function () {
+    // JSON ve AJAX isteklerinde footer basılmasını engelle
+    if (
+        (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') ||
+        (strpos($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json') !== false) ||
+        (isset($_GET['page']) && $_GET['page'] === 'social')
+    ) {
+        return;
+    }
+
     echo '<div class="text-center pb-5 opacity-40 small">
         <span lang="site_version"></span> | Default Theme
     </div>';

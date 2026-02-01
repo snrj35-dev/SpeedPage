@@ -79,18 +79,28 @@ function run_hook(string $tag, mixed $data = null): mixed
 add_hook('footer_end', function () {
     global $db;
 
-    // 1. Auth Check (Admin?)
+    // If AJAX or JSON request, DO NOT run this hook
+    if (
+        (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') ||
+        (strpos($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json') !== false) ||
+        (isset($_GET['page']) && $_GET['page'] === 'social') // Specific fix for social module
+    ) {
+        return;
+    }
+
+    // 1. Auth Check (Admin Only)
     $is_admin = (isset($_SESSION['role']) && $_SESSION['role'] === 'admin');
     $is_debug = defined('DEBUG') && DEBUG;
 
-    if (!$is_admin && !$is_debug) {
+    // Only show to admins. Even in debug mode, guests shouldn't see this.
+    if (!$is_admin) {
         return;
     }
 
     // 2. AI API Key Check
     $apiKey = '';
     if (!$db) {
-        $db_path = defined('DB_PATH') ? DB_PATH : __DIR__ . '/../admin/veritabanı/data.db';
+        $db_path = defined('DB_PATH') ? DB_PATH : __DIR__ . '/../admin/_internal_storage/data_secure/data.db';
         if (file_exists($db_path)) {
             try {
                 $db = new PDO("sqlite:" . $db_path);

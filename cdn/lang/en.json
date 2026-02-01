@@ -415,5 +415,7 @@
     "footer_text_default": "Designed and built with all the love in the world by the SpeedPage team.",
     "copyright_default": "© 2026 SpeedPage",
     "choose_theme": "Choose Theme",
-    "system_default": "System Default"
+    "system_default": "System Default",
+    "access_denied": "Access Denied",
+    "module_permission_error": "You do not have required permissions to access this module."
 }

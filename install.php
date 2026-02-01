@@ -19,6 +19,7 @@ $txt = [
         'db_settings' => 'Veritabanı Ayarları',
         'site_name' => 'Site Adı',
         'admin_user' => 'Admin Kullanıcı Adı',
+        'admin_email' => 'Admin Email',
         'admin_pass' => 'Admin Şifre',
         'db_type' => 'Veritabanı Türü',
         'host' => 'MySQL Host',
@@ -49,6 +50,7 @@ $txt = [
         'db_settings' => 'Database Settings',
         'site_name' => 'Site Name',
         'admin_user' => 'Admin Username',
+        'admin_email' => 'Admin Email',
         'admin_pass' => 'Admin Password',
         'db_type' => 'Database Type',
         'host' => 'MySQL Host',
@@ -108,6 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         $siteName = filter_input(INPUT_POST, 'site_name', FILTER_SANITIZE_SPECIAL_CHARS);
         $adminUser = filter_input(INPUT_POST, 'admin_user', FILTER_SANITIZE_SPECIAL_CHARS);
+        $adminEmail = filter_input(INPUT_POST, 'admin_email', FILTER_VALIDATE_EMAIL);
         $adminPass = $_POST['admin_pass'] ?? '';
 
         $dbDriver = $_POST['db_driver'] ?? 'sqlite';
@@ -127,12 +130,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         // --- 1. Veritabanı Klasörü & Dosyalar
-        $dbDir = __DIR__ . '/admin/veritabanı';
+        $storageMain = __DIR__ . '/admin/_internal_storage';
+        if (!is_dir($storageMain)) {
+            mkdir($storageMain, 0777, true); // Create shared storage with full access initially
+            @chmod($storageMain, 0777);
+        }
+
+        $dbDir = $storageMain . '/data_secure';
         if (!is_dir($dbDir)) {
-            if (!mkdir($dbDir, 0755, true)) {
+            if (!mkdir($dbDir, 0777, true)) {
                 throw new Exception($t['write_error'] . " $dbDir");
             }
+            @chmod($dbDir, 0777); 
         }
+
+        // --- Permissions Logic: Ensure settings.php and storage are writable during install ---
+        if (file_exists($settingsPath)) {
+            @chmod($settingsPath, 0666);
+        }
+
         // Güvenlik Dosyaları
         if (!file_exists($dbDir . '/index.html'))
             file_put_contents($dbDir . '/index.html', '');
@@ -168,17 +184,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sql = "
 -- SpeedPage Agnostic Backup
 
-CREATE TABLE IF NOT EXISTS pages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    slug TEXT NOT NULL UNIQUE,
-    title TEXT NOT NULL,
-    description TEXT,
-    icon TEXT,
-    is_active INTEGER DEFAULT 1,
-    sort_order INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    featured_image TEXT, 
-    content LONGTEXT
+
+CREATE TABLE IF NOT EXISTS ai_personas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        persona_key TEXT UNIQUE,
+        persona_name TEXT,
+        system_prompt TEXT,
+        is_default INTEGER DEFAULT 0
+    );
+
+CREATE TABLE IF NOT EXISTS ai_providers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        provider_key TEXT UNIQUE,
+        provider_name TEXT,
+        api_key TEXT,
+        models TEXT,
+        is_enabled INTEGER DEFAULT 1
+    );
+
+CREATE TABLE IF NOT EXISTS ai_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        provider_key TEXT,
+        model_id TEXT,
+        action_type TEXT,
+        prompt TEXT,
+        response TEXT,
+        input_tokens INTEGER DEFAULT 0,
+        output_tokens INTEGER DEFAULT 0,
+        file_path TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+CREATE TABLE IF NOT EXISTS logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NULL,
+        action_type TEXT NOT NULL, 
+        message TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        old_data TEXT NULL,
+        new_data TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+
+CREATE TABLE IF NOT EXISTS login_attempts (
+        ip_address TEXT PRIMARY KEY,
+        attempts INTEGER DEFAULT 0,
+        last_attempt INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS menus (
@@ -208,7 +261,47 @@ CREATE TABLE IF NOT EXISTS modules (
     description TEXT,
     page_slug TEXT,
     is_active INTEGER DEFAULT 1,
-    installed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    installed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    admin_menu_title TEXT,
+    admin_menu_url TEXT,
+    admin_menu_icon TEXT,
+    permissions TEXT
+);
+
+CREATE TABLE IF NOT EXISTS module_assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    module_id INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    path TEXT NOT NULL,
+    load_order INTEGER DEFAULT 0,
+    location TEXT DEFAULT 'admin',
+    FOREIGN KEY (module_id) REFERENCES modules(id)
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,          -- Bildirimi alacak kişi
+    actor_id INTEGER NOT NULL,         -- Eylemi yapan kişi (from_user_id)
+    target_type TEXT NOT NULL,         -- 'forum', 'social', 'system'
+    target_id INTEGER NOT NULL,        -- İlgili içeriğin ID'si (post_id, comment_id vb.)
+    action_type TEXT NOT NULL,         -- 'like', 'reply', 'mention', 'friend_request'
+    content TEXT,                      -- Opsiyonel: Kısa önizleme metni
+    is_read INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS pages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slug TEXT NOT NULL UNIQUE,
+    title TEXT NOT NULL,
+    description TEXT,
+    icon TEXT,
+    is_active INTEGER DEFAULT 1,
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    featured_image TEXT, 
+    content LONGTEXT
 );
 
 CREATE TABLE IF NOT EXISTS page_assets (
@@ -220,47 +313,7 @@ CREATE TABLE IF NOT EXISTS page_assets (
     FOREIGN KEY (page_id) REFERENCES pages(id)
 );
 
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    role TEXT DEFAULT 'admin',
-    is_active INTEGER DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    display_name TEXT, 
-    avatar_url TEXT DEFAULT 'fa-code', 
-    bio TEXT, 
-    preferred_theme TEXT DEFAULT NULL
-);
-
-CREATE TABLE IF NOT EXISTS module_assets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    module_id INTEGER NOT NULL,
-    type TEXT NOT NULL,
-    path TEXT NOT NULL,
-    load_order INTEGER DEFAULT 0,
-    FOREIGN KEY (module_id) REFERENCES modules(id)
-);
-
 CREATE TABLE IF NOT EXISTS settings ( key TEXT PRIMARY KEY, value TEXT );
-
-CREATE TABLE IF NOT EXISTS login_attempts (
-        ip_address TEXT PRIMARY KEY,
-        attempts INTEGER DEFAULT 0,
-        last_attempt INTEGER DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NULL,
-                action_type TEXT NOT NULL, 
-                message TEXT,
-                ip_address TEXT,
-                user_agent TEXT,
-                old_data TEXT NULL,
-                new_data TEXT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
 
 CREATE TABLE IF NOT EXISTS theme_settings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -270,26 +323,27 @@ CREATE TABLE IF NOT EXISTS theme_settings (
     UNIQUE(theme_name, setting_key)
 );
 
-CREATE TABLE IF NOT EXISTS ai_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                action_type TEXT,
-                prompt TEXT,
-                response TEXT,
-                file_path TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    display_name TEXT,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT DEFAULT 'user',
+    avatar_url TEXT,
+    preferred_theme TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
-CREATE TABLE IF NOT EXISTS custom_snippets (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, code TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS user_meta (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    meta_key TEXT NOT NULL,
+    meta_value TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
 
-CREATE TABLE IF NOT EXISTS ai_providers (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    provider_key TEXT UNIQUE,
-                    provider_name TEXT,
-                    api_key TEXT,
-                    models TEXT,
-                    is_enabled INTEGER DEFAULT 1
-                );
 ";
 
         if ($dbDriver === 'mysql') {
@@ -390,8 +444,8 @@ CREATE TABLE IF NOT EXISTS ai_providers (
             $stmt = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
             $stmt->execute([password_hash($adminPass, PASSWORD_DEFAULT), $existingUser]);
         } else {
-            $stmt = $pdo->prepare("INSERT INTO users (username, password_hash, role, display_name) VALUES (?, ?, 'admin', ?)");
-            $stmt->execute([$adminUser, password_hash($adminPass, PASSWORD_DEFAULT), $adminUser]);
+            $stmt = $pdo->prepare("INSERT INTO users (username, email, password_hash, role, display_name) VALUES (?, ?, ?, 'admin', ?)");
+            $stmt->execute([$adminUser, $adminEmail, password_hash($adminPass, PASSWORD_DEFAULT), $adminUser]);
         }
 
         // --- 5. Settings.php Güncelleme
@@ -429,7 +483,7 @@ CREATE TABLE IF NOT EXISTS ai_providers (
                 "if (!defined('DB_PORT')) define('DB_PORT', 3306);";
         } else {
             $dbConfigBlock .= "\n" .
-                "if (!defined('DB_PATH')) define('DB_PATH', __DIR__ . '/admin/veritabanı/data.db');";
+                "if (!defined('DB_PATH')) define('DB_PATH', DATA_DIR . 'data.db');";
         }
 
         if (strpos($currentSettings, '// 3. Veritabanı Ayarları') !== false) {
@@ -443,6 +497,16 @@ CREATE TABLE IF NOT EXISTS ai_providers (
 
         $finalSettings = $currentSettings . "\n\n" . $dbConfigBlock . "\n";
         file_put_contents($settingsPath, $finalSettings);
+
+        // --- 6. Final Security Lockdown ---
+        // Lock settings.php to read-only for others
+        @chmod($settingsPath, 0644);
+        
+        // Lock internal storage folders to standard secure permissions
+        if (is_dir($storageMain)) @chmod($storageMain, 0755);
+        if (is_dir($dbDir)) @chmod($dbDir, 0755);
+        if (is_dir($storageMain . '/_cache')) @chmod($storageMain . '/_cache', 0755);
+        if (is_dir($storageMain . '/_temp')) @chmod($storageMain . '/_temp', 0755);
 
         $message = $t['success_title'];
 
@@ -689,9 +753,12 @@ CREATE TABLE IF NOT EXISTS ai_providers (
 
                 <div class="form-group">
                     <label for="admin_user"><?= $t['admin_user'] ?></label>
-                    <input type="text" id="admin_user" name="admin_user" placeholder="admin" required>
+                    <input type="text" id="admin_user" name="admin_user" required>
                 </div>
-
+                <div class="form-group">
+                    <label for="admin_email"><?= $t['admin_email'] ?></label>
+                    <input type="email" id="admin_email" name="admin_email" required>
+                </div>
                 <div class="form-group">
                     <label for="admin_pass"><?= $t['admin_pass'] ?></label>
                     <input type="password" id="admin_pass" name="admin_pass" required>
@@ -738,7 +805,7 @@ CREATE TABLE IF NOT EXISTS ai_providers (
             btn.innerText = "...";
 
             try {
-                const response = await fetch('install.php?lang=<?= $langCode ?>', { method: 'POST', body: formData });
+                const response = await fetch(window.location.pathname + '?lang=<?= $langCode ?>', { method: 'POST', body: formData });
                 const result = await response.text();
                 alert(result);
             } catch (e) {

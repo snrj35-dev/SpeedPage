@@ -13,18 +13,5 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
-// CSRF token generation
-if (empty($_SESSION['csrf'])) {
-    $_SESSION['csrf'] = bin2hex(random_bytes(32));
-}
-
-// CSRF validation helper
-function check_csrf(): void
-{
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        if (!isset($_POST['csrf']) || $_POST['csrf'] !== $_SESSION['csrf']) {
-            die('CSRF Error');
-        }
-    }
-}
+// Note: CSRF token and check_csrf() are now in settings.php
 

@@ -18,18 +18,18 @@ $pages = $db->query("
         <?php foreach ($pages as $p): ?>
             <div class="app-card">
                 <div class="app-card-icon">
-                    <i class="fa <?= htmlspecialchars($p['icon']) ?>"></i>
+                    <i class="fa <?= e($p['icon']) ?>"></i>
                 </div>
 
                 <div class="app-card-title">
-                    <?= htmlspecialchars($p['title']) ?>
+                    <?= e($p['title']) ?>
                 </div>
 
                 <div class="app-card-desc">
-                    <?= htmlspecialchars($p['description']) ?>
+                    <?= e($p['description']) ?>
                 </div>
 
-                <a href="?page=<?= htmlspecialchars($p['slug']) ?>">
+                <a href="?page=<?= e($p['slug']) ?>">
                     <span lang="go_content">İçeriğe Git</span>
                 </a>
             </div>
@@ -39,18 +39,18 @@ $pages = $db->query("
     <div class="mobile-list">
         <?php foreach ($pages as $p): ?>
             <div class="mobile-item">
-                <i class="fa <?= htmlspecialchars($p['icon']) ?>"></i>
+                <i class="fa <?= e($p['icon']) ?>"></i>
 
                 <div>
                     <div class="mobile-text-title">
-                        <?= htmlspecialchars($p['title']) ?>
+                        <?= e($p['title']) ?>
                     </div>
                     <div class="mobile-text-desc">
-                        <?= htmlspecialchars($p['description']) ?>
+                        <?= e($p['description']) ?>
                     </div>
                 </div>
 
-                <a href="?page=<?= htmlspecialchars($p['slug']) ?>"><span lang="go">Git</span></a>
+                <a href="?page=<?= e($p['slug']) ?>"><span lang="go">Git</span></a>
             </div>
         <?php endforeach; ?>
     </div>

@@ -66,9 +66,22 @@ function updateContent(translations) {
 }
 
 // Dil değiştir
-async function setLanguage(lang) {
+async function setLanguage(lang, reload = false, sync = false) {
     currentLang = lang;
     localStorage.setItem(LANG_KEY, lang);
+
+    // ✅ Sync with PHP Session (Only on explicit change)
+    if (sync) {
+        try {
+            await fetch(`${BASE_URL}php/set-lang.php`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lang: lang })
+            });
+        } catch (e) {
+            console.error("Language sync error:", e);
+        }
+    }
 
     const translations = await loadTranslation(lang);
 
@@ -84,15 +97,19 @@ async function setLanguage(lang) {
     if (langSelect) {
         langSelect.value = lang;
     }
+
+    if (reload) {
+        location.reload();
+    }
 }
 
 // Dil seçici
 if (langSelect) {
     langSelect.addEventListener('change', e => {
-        setLanguage(e.target.value);
+        setLanguage(e.target.value, true, true);
     });
 }
 
-// İlk yükleme
-setLanguage(currentLang);
+// İlk yükleme (Sync false: PHP zaten dili biliyor)
+setLanguage(currentLang, false, false);
 

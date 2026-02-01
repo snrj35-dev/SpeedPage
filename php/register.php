@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once '../settings.php';
 require_once '../admin/db.php';
+require_once 'notifications.php';
 require_once 'theme-init.php';
 require_once 'menu-loader.php';
 /** @var PDO $db */
@@ -76,6 +77,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     $ins = $db->prepare("INSERT INTO users (username, display_name, password_hash, role, is_active, avatar_url) VALUES (?, ?, ?, 'user', ?, 'fa-user')");
                     // Using default avatar 'fa-user'
                     $ins->execute([$username, $username, $hash, $is_active]);
+                    $newUserId = (int) $db->lastInsertId();
+
+                    // Adminlere sistem bildirimi gönder
+                    $adminStmt = $db->query("SELECT id FROM users WHERE role = 'admin'");
+                    $admins = $adminStmt->fetchAll(PDO::FETCH_COLUMN);
+                    foreach ($admins as $adminId) {
+                        addNotification(
+                            (int) $adminId,
+                            $newUserId,
+                            'system',
+                            $newUserId,
+                            'new_user',
+                            $username
+                        );
+                    }
                     $success_message = '<span lang="registration_success"></span>';
                     header("Refresh: 2; url=" . BASE_URL . "php/login.php");
                 }
@@ -104,37 +120,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
     }
 }
+$pageTitle = (function_exists('__') ? __('register_title') : 'Kayıt Ol') . ' - ' . ($settings['site_name'] ?? 'SpeedPage');
+load_theme_part('header');
 ?>
-<!DOCTYPE html>
-<html lang="<?= htmlspecialchars($settings['default_lang'] ?? 'tr') ?>">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= function_exists('__') ? __('register_title') : 'Kayıt Ol' ?> -
-        <?= e($settings['site_name'] ?? 'SpeedPage') ?>
-    </title>
-    <script>
-        (function () {
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.setAttribute('data-theme', 'dark');
-            }
-        })();
-        const BASE_PATH = '<?= BASE_PATH ?>';
-        const BASE_URL = "<?= BASE_URL ?>"; 
-    </script>
-    <link rel="stylesheet" href="<?= CDN_URL ?>css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= CDN_URL ?>css/all.min.css">
-    <?php
-    $themeCss = "themes/" . ACTIVE_THEME . "/style.css";
-    if (file_exists(ROOT_DIR . $themeCss)) {
-        echo '<link rel="stylesheet" href="' . BASE_URL . $themeCss . '?v=' . filemtime(ROOT_DIR . $themeCss) . '">';
-    }
-    ?>
-</head>
-
-<body>
 
     <?php load_theme_part('navbar'); ?>
 
@@ -220,10 +208,3 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     </main>
 
     <?php load_theme_part('footer'); ?>
-
-    <script src="<?= CDN_URL ?>js/bootstrap.bundle.min.js"></script>
-    <script src="<?= CDN_URL ?>js/dark.js"></script>
-    <script src="<?= CDN_URL ?>js/lang.js"></script>
-</body>
-
-</html>

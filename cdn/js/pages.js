@@ -1,4 +1,5 @@
 let editEditor = null;
+let pageState = { page: 1, search: '' };
 
 const STATIC_SNIPPETS = {
     // --- LAYOUT & GRIDS ---
@@ -143,6 +144,131 @@ function manageSnippets(action, id = null) {
                 if (res.ok) location.reload();
             });
     }
+}
+
+// --- DYNAMİK SAYFA LİSTELEME ---
+function loadPages(page = 1, search = '') {
+    pageState.page = page;
+    pageState.search = search;
+    const body = document.getElementById('pageTableBody');
+    if (!body) return;
+
+    fetch(`page-actions.php?list_pages=1&page=${page}&search=${encodeURIComponent(search)}`)
+        .then(r => r.json())
+        .then(res => {
+            if (!res.success) {
+                body.innerHTML = '<tr><td colspan="5" class="text-center py-4">Hata oluştu</td></tr>';
+                return;
+            }
+            const pages = res.pages || [];
+            if (pages.length === 0) {
+                body.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Sayfa bulunamadı</td></tr>';
+            } else {
+                body.innerHTML = pages.map(p => `
+                    <tr>
+                        <td class="text-center">${p.icon ? `<i class="${p.icon} text-muted"></i>` : '-'}</td>
+                        <td class="fw-bold text-dark">/${escapeHtml(p.slug)}</td>
+                        <td>${escapeHtml(p.title)} <br><small class="text-muted">${escapeHtml(p.description || '')}</small></td>
+                        <td class="text-center">
+                            ${p.is_active ? '<span class="badge-active">Aktif</span>' : '<span class="badge-passive">Pasif</span>'}
+                        </td>
+                        <td class="text-end" style="padding-right: 20px;">
+                            <div class="btn-group">
+                                ${p.is_module ? `
+                                    <button class="btn btn-action btn-outline-secondary" onclick="alert('Modül sayfasıdır.')"><i class="fas fa-puzzle-piece"></i></button>
+                                ` : `
+                                    <button class="btn btn-action btn-outline-primary edit-page-btn" data-slug="${p.slug}"><i class="fas fa-edit"></i></button>
+                                    <button class="btn btn-action btn-outline-danger delete-page-btn" data-slug="${p.slug}"><i class="fas fa-trash"></i></button>
+                                `}
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // Event listener'ları tekrar bağla (Dinamik içerik için delegation daha iyi ama şimdilik manuel)
+                bindPageActions();
+            }
+            renderPagePagination(res.total_pages, res.current_page);
+        });
+}
+
+function renderPagePagination(totalPages, currentPage) {
+    const nav = document.getElementById('pagePagination');
+    if (!nav) return;
+    if (totalPages <= 1) { nav.innerHTML = ''; return; }
+
+    let html = '<ul class="pagination pagination-sm">';
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+            <a class="page-link" href="#" onclick="event.preventDefault(); loadPages(${i}, pageState.search)">${i}</a>
+        </li>`;
+    }
+    html += '</ul>';
+    nav.innerHTML = html;
+}
+
+function bindPageActions() {
+    // Edit butonu
+    document.querySelectorAll('.edit-page-btn').forEach(btn => {
+        btn.onclick = () => openEditModal(btn.dataset.slug);
+    });
+    // Delete butonu
+    document.querySelectorAll('.delete-page-btn').forEach(btn => {
+        btn.onclick = () => {
+            if (confirm('Emin misiniz?')) {
+                window.location = "page-actions.php?action=delete&slug=" + btn.dataset.slug;
+            }
+        };
+    });
+}
+
+// Edit Modal Açma Mantığı (Eski event listener'dan buraya taşındı)
+function openEditModal(slug) {
+    const modalEl = document.getElementById('editModal');
+    let editModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    fetch(`page-actions.php?get_slug=${slug}`)
+        .then(r => r.json()).then(res => {
+            if (!res.success) return alert(res.error || 'Hata');
+            document.getElementById('old_slug').value = slug;
+            document.getElementById('edit_slug').value = res.slug;
+            document.getElementById('edit_title').value = res.title;
+            document.getElementById('edit_description').value = res.description || '';
+            document.getElementById('edit_icon').value = res.icon || '';
+            document.getElementById('edit_is_active').value = res.is_active;
+
+            const content = res.content || '';
+            document.getElementById('edit_content').value = content;
+            if (editEditor) {
+                editEditor.setValue(content);
+                setTimeout(() => editEditor.refresh(), 200);
+            }
+
+            // Image preview
+            const imgPreview = document.getElementById('edit_image_preview');
+            const imgContainer = document.getElementById('edit_image_preview_container');
+            if (res.featured_image) {
+                imgPreview.src = res.featured_image;
+                imgContainer.style.display = 'block';
+            } else {
+                imgPreview.src = '';
+                imgContainer.style.display = 'none';
+            }
+
+            const currentCss = res.css ? res.css.split(',').map(s => s.trim()) : [];
+            const currentJs = res.js ? res.js.split(',').map(s => s.trim()) : [];
+            const allCss = JSON.parse(document.getElementById('allCssFiles').textContent || '[]');
+            const allJs = JSON.parse(document.getElementById('allJsFiles').textContent || '[]');
+            renderEditAssets(allCss, currentCss, 'edit_css_list', 'assets_css[]');
+            renderEditAssets(allJs, currentJs, 'edit_js_list', 'assets_js[]');
+
+            const customCss = currentCss.filter(p => !allCss.includes(p));
+            const customJs = currentJs.filter(p => !allJs.includes(p));
+            document.getElementById('edit_custom_css').value = customCss.join(', ');
+            document.getElementById('edit_custom_js').value = customJs.join(', ');
+
+            editModal.show();
+        });
 }
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -328,78 +454,12 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    document.querySelectorAll('.edit-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const slug = btn.dataset.slug;
-            fetch(`page-actions.php?get_slug=${slug}`)
-                .then(r => r.json()).then(res => {
-                    if (!res.success) return;
-                    document.getElementById('old_slug').value = slug;
-                    document.getElementById('edit_slug').value = res.slug;
-                    document.getElementById('edit_title').value = res.title;
-                    document.getElementById('edit_description').value = res.description || '';
-                    document.getElementById('edit_icon').value = res.icon || '';
-                    document.getElementById('edit_is_active').value = res.is_active;
-
-                    // İçeriği textarea'ya koy (CodeMirror bunu shown eventinde alacak)
-                    const content = res.content || '';
-                    document.getElementById('edit_content').value = content;
-                    if (editEditor) {
-                        editEditor.setValue(content);
-                        setTimeout(() => editEditor.refresh(), 200);
-                    }
-
-                    // Öne Çıkan Görsel Önizleme
-                    const imgPreview = document.getElementById('edit_image_preview');
-                    const imgContainer = document.getElementById('edit_image_preview_container');
-                    if (res.featured_image) {
-                        // Eğer http ile başlamıyorsa ve zaten ../ eklenmemişse başına ../ koy
-                        let finalPath = res.featured_image;
-                        if (!finalPath.startsWith('http') && !finalPath.startsWith('../')) {
-                            finalPath = '../' + finalPath;
-                        }
-                        imgPreview.src = finalPath;
-                        imgContainer.style.display = 'block';
-                    } else {
-                        imgPreview.src = '';
-                        imgContainer.style.display = 'none';
-                    }
-
-                    // Asset Regex ile ayırma (Basit virgül ayırma yerine, listeden eşleştirme)
-                    // Gelen data: "cdn/css/style.css, cdn/css/custom.css, custom/path.css"
-                    const currentCss = res.css ? res.css.split(',').map(s => s.trim()) : [];
-                    const currentJs = res.js ? res.js.split(',').map(s => s.trim()) : [];
-
-                    const allCss = JSON.parse(document.getElementById('allCssFiles').textContent || '[]');
-                    const allJs = JSON.parse(document.getElementById('allJsFiles').textContent || '[]');
-
-                    // 1. Checkboxları Doldur
-                    renderEditAssets(allCss, currentCss, 'edit_css_list', 'assets_css[]');
-                    renderEditAssets(allJs, currentJs, 'edit_js_list', 'assets_js[]');
-
-                    // 2. Checkboxlarda olmayanları Custom alanına yaz
-                    const customCss = currentCss.filter(p => !allCss.includes(p));
-                    const customJs = currentJs.filter(p => !allJs.includes(p));
-
-                    document.getElementById('edit_custom_css').value = customCss.join(', ');
-                    document.getElementById('edit_custom_js').value = customJs.join(', ');
-
-                    // Modal Snippet Menüsünü Doldur (Eğer boşsa)
-                    const modalSnippetMenuContainer = document.getElementById('editSnippetMenu');
-                    const mainSnippetSelect = document.querySelector('#tab-genel select');
-
-                    if (modalSnippetMenuContainer && mainSnippetSelect && modalSnippetMenuContainer.children.length === 0) {
-                        // Dropdown yerine Select yapısını buraya da kopyalıyoruz
-                        const newSelect = mainSnippetSelect.cloneNode(true);
-                        newSelect.classList.remove('px-3');
-                        newSelect.classList.add('form-select-sm', 'w-100');
-                        modalSnippetMenuContainer.appendChild(newSelect);
-                    }
-
-                    editModal.show();
-                });
+    /* 
+        Dinamik tabloya geçildi, bu kısım loadPages içinde bindPageActions() ile yönetiliyor.
+        document.querySelectorAll('.edit-btn').forEach(btn => {
+            ...
         });
-    });
+    */
 
     // --- ICON PICKER & LIVE PREVIEW SYSTEM ---
     const iconList = [
@@ -501,12 +561,31 @@ document.addEventListener('DOMContentLoaded', function () {
             });
     });
 
-    // 4. SİLME
+    /* 
+    Dinamik tabloya geçildi.
     document.querySelectorAll(".delete-btn").forEach(btn => {
         btn.addEventListener("click", () => {
             if (confirm('Emin misiniz?')) window.location = "page-actions.php?action=delete&slug=" + btn.dataset.slug;
         });
     });
+    */
+
+    // Arama Event Listener
+    const pageSearchInput = document.getElementById('pageListSearch');
+    if (pageSearchInput) {
+        let pageDebounce;
+        pageSearchInput.addEventListener('input', e => {
+            clearTimeout(pageDebounce);
+            pageDebounce = setTimeout(() => {
+                loadPages(1, e.target.value);
+            }, 500);
+        });
+    }
+
+    // İlk yükleme
+    if (document.getElementById('pageTableBody')) {
+        loadPages();
+    }
 
     // Menü Göster/Gizle
     const chk = document.getElementById('addToMenu');

@@ -78,3 +78,30 @@ if ($col_count > 0 && $col_count <= 2) {
         </div>
     </div>
 </footer>
+
+
+    <!-- Module Global JS -->
+    <?php if (isset($globalAssets['js']) && is_array($globalAssets['js'])): ?>
+        <?php foreach ($globalAssets['js'] as $gJs): ?>
+            <script src="<?= e($gJs) ?>?v=<?= APP_VERSION ?>"></script>
+        <?php endforeach; ?>
+    <?php endif; ?>
+
+    <script src="<?= CDN_URL ?>js/router.js?v=<?= APP_VERSION ?>"></script>
+    <script src="<?= CDN_URL ?>js/navbar.js?v=<?= APP_VERSION ?>"></script>
+    <script src="<?= CDN_URL ?>js/bootstrap.bundle.min.js?v=<?= APP_VERSION ?>"></script>
+    <?php if (ACTIVE_THEME !== 'fantastik'): ?>
+        <script src="<?= CDN_URL ?>js/dark.js?v=<?= APP_VERSION ?>"></script>
+    <?php endif; ?>
+    <script src="<?= CDN_URL ?>js/lang.js?v=<?= APP_VERSION ?>"></script>
+
+    <script>
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("<?= BASE_PATH ?>service-worker.js");
+        }
+    </script>
+
+    <?php if (function_exists('run_hook')) run_hook('footer_end'); ?>
+</body>
+
+</html>

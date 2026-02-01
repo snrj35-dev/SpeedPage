@@ -3,9 +3,19 @@
    user.js
 ============================ */
 
+let userState = {
+    page: 1,
+    search: ''
+};
+
 // Kullanıcıları listele
-function loadUsers() {
-    fetch('user-edit.php')
+function loadUsers(page = 1, search = '') {
+    userState.page = page;
+    userState.search = search;
+
+    const url = `user-edit.php?page=${page}&search=${encodeURIComponent(search)}`;
+
+    fetch(url)
         .then(r => r.json())
         .then(res => {
             const body = document.getElementById('usersTableBody');
@@ -27,7 +37,27 @@ function loadUsers() {
                     </td>
                 </tr>`;
             }).join('') || '<tr><td colspan="6">' + (window.lang?.no_data || 'No data') + '</td></tr>';
+
+            renderPagination(res.total_pages, res.current_page);
         });
+}
+
+function renderPagination(totalPages, currentPage) {
+    const nav = document.getElementById('userPagination');
+    if (!nav) return;
+    if (totalPages <= 1) {
+        nav.innerHTML = '';
+        return;
+    }
+
+    let html = '<ul class="pagination pagination-sm">';
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<li class="page-item ${i === currentPage ? 'active' : ''}">
+            <a class="page-link" href="#" onclick="event.preventDefault(); loadUsers(${i}, userState.search)">${i}</a>
+        </li>`;
+    }
+    html += '</ul>';
+    nav.innerHTML = html;
 }
 
 // Kullanıcı modal aç
@@ -73,27 +103,30 @@ function deleteUser(id) {
         .then(r => r.json())
         .then(res => {
             if (res.ok) {
-                loadUsers();
+                loadUsers(userState.page, userState.search);
                 alert(window.lang?.user_deleted || 'Deleted');
             }
             else alert((window.lang?.errdata || 'Error: ') + (res.error || ''));
         });
 }
 
-// HTML escape helper
-function escapeHtml(s) {
-    return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
+// escapeHtml is now in admin.js
 
 // DOM hazır olduğunda eventler
 document.addEventListener('DOMContentLoaded', function () {
     const addBtn = document.getElementById('addUserBtn');
     if (addBtn) addBtn.addEventListener('click', () => openUserModal());
+
+    const searchInput = document.getElementById('userListSearch');
+    if (searchInput) {
+        let debounceTimer;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                loadUsers(1, e.target.value);
+            }, 500);
+        });
+    }
 
     const saveBtn = document.getElementById('saveUserBtn');
     if (saveBtn) saveBtn.addEventListener('click', () => {
@@ -109,7 +142,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (res.ok) {
                     const modal = bootstrap.Modal.getInstance(document.getElementById('userModal'));
                     modal.hide();
-                    loadUsers();
+                    loadUsers(userState.page, userState.search);
                     alert(window.lang?.updatelang || 'Updated');
                 } else {
                     alert((window.lang?.errdata || 'Error: ') + (res.error || ''));

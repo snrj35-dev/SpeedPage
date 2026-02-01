@@ -37,7 +37,15 @@ if (!defined('ACTIVE_THEME')) {
 if (!function_exists('load_theme_part')) {
     function load_theme_part(string $part): void
     {
-        global $db, $menus, $settings, $currentUser;
+        global $db, $menus, $settings, $currentUser, $pageTitle, $metaDesc, $metaKeys, $globalAssets, $siteSlogan;
+
+        $settings ??= [];
+        $menus ??= [];
+        $globalAssets ??= ['css' => [], 'js' => []];
+        $pageTitle ??= '';
+        $metaDesc ??= '';
+        $metaKeys ??= '';
+        $siteSlogan ??= '';
 
         $themeFile = ROOT_DIR . "themes/" . ACTIVE_THEME . "/$part.php";
         if (file_exists($themeFile)) {

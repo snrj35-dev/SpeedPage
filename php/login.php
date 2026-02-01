@@ -99,37 +99,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
     }
 }
+$pageTitle = (function_exists('__') ? __('login_title') : 'Giriş Yap') . ' - ' . ($settings['site_name'] ?? 'SpeedPage');
+load_theme_part('header');
 ?>
-<!DOCTYPE html>
-<html lang="<?= htmlspecialchars($settings['default_lang'] ?? 'tr') ?>">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= function_exists('__') ? __('login_title') : 'Giriş Yap' ?> -
-        <?= e($settings['site_name'] ?? 'SpeedPage') ?>
-    </title>
-    <script>
-        (function () {
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.setAttribute('data-theme', 'dark');
-            }
-        })();
-        const BASE_PATH = '<?= BASE_PATH ?>';
-        const BASE_URL = "<?= BASE_URL ?>"; 
-    </script>
-    <link rel="stylesheet" href="<?= CDN_URL ?>css/bootstrap.min.css">
-    <link rel="stylesheet" href="<?= CDN_URL ?>css/all.min.css">
-    <?php
-    $themeCss = "themes/" . ACTIVE_THEME . "/style.css";
-    if (file_exists(ROOT_DIR . $themeCss)) {
-        echo '<link rel="stylesheet" href="' . BASE_URL . $themeCss . '?v=' . filemtime(ROOT_DIR . $themeCss) . '">';
-    }
-    ?>
-</head>
-
-<body>
 
     <?php load_theme_part('navbar'); ?>
 
@@ -221,10 +193,3 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     </main>
 
     <?php load_theme_part('footer'); ?>
-
-    <script src="<?= CDN_URL ?>js/bootstrap.bundle.min.js"></script>
-    <script src="<?= CDN_URL ?>js/dark.js"></script>
-    <script src="<?= CDN_URL ?>js/lang.js"></script>
-</body>
-
-</html>

@@ -1,77 +1,63 @@
-📘 SpeedPage
+# 📘 SpeedPage CMS (v0.3 Alpha)
 
 SpeedPage — A modular, panel-oriented Content Management System (CMS) designed for high performance and flexibility. Now featuring a Universal Installation Wizard with support for both SQLite and MySQL.
 
-Goal: To provide developers with a clean working environment through fast setup, offline support, multi-language support, and flexible module management.
-⚙️ Installation (New & Simplified)
+---
 
-    Upload the files to your localhost or your server.
+## 🤖 SpeedPage Dev-Bot (Interactive Guide)
 
-    Open your site in the browser (e.g., localhost/speedpage).
+**Turkish & English Support Available!**  
+If you have any questions about the project, file structure, or how to create modules, you can chat with our **Interactive Assistant**. It knows everything about the codebase!
 
-    You will be automatically redirected to the Installation Wizard (install.php).
+👉 **[Launch Interactive Chatbot / İnteraktif Asistanı Başlat](https://snrj35-dev.github.io/SpeedPage-modul-theme/)**
 
-    Follow the steps:
+---
 
-        Database Choice: Select SQLite (for zero-config/local) or MySQL (for production).
+## 🇹🇷 Türkçe Özet
+SpeedPage, yüksek performans ve esneklik için tasarlanmış, modüler ve panel odaklı bir İçerik Yönetim Sistemidir (CMS). SQLite ve MySQL desteği sunan Evrensel Kurulum Sihirbazı ile birlikte gelir. Proje yapısı, dosyalar veya modül geliştirme hakkında merak ettiklerinizi yukarıdaki **İnteraktif Bot** üzerinden hem Türkçe hem İngilizce olarak sorabilirsiniz.
 
-        Connection Test: Integrated tool to verify your MySQL credentials before installing.
+---
 
-        Admin Setup: Define your admin username and password during installation.
+## 🚀 Key Updates (v0.3 Alpha)
+### 🛠️ Universal Installer
+- **Agnostic DB Support:** Switch between SQLite and MySQL with a single click.
+- **Smart Schema Deployment:** Automatically creates all tables with pre-configured default values.
+- **Dynamic settings.php:** Automatically detects your BASE_URL and updates configurations.
 
-        Auto-Config: The system automatically writes your settings.php and creates the admin/veritabanı/data.db (if SQLite is chosen).
+### 🤖 Admin AI Assistant
+- Integrated into the panel, capable of analyzing code errors and applying patches directly using OpenRouter/OpenAI API.
 
-    Security: Delete install.php after the "Success" message.
+### 🛡️ Smart Maintenance & Security
+- **WAL Mode Support:** Optimized SQLite performance.
+- **Auto-Installer Lock:** Prevents re-installation if the system is already configured.
 
-🚀 Key Updates (v0.3 Alpha - Installer Edition)
-🛠️ Universal Installer
+---
 
-    Agnostic DB Support: Switch between SQLite and MySQL with a single click.
+## 📦 Core Features
+- **Dual Database Engine:** Use SQLite for lightweight portability or MySQL for heavy traffic.
+- **Theme Management:** Manage Theme Settings directly from the DB.
+- **PWA Ready:** Native support for manifest.json and service-worker.js.
+- **Modular Architecture:** Upload ZIP modules/themes through the admin panel.
+- **Database Migration:** Built-in wizard to move data from SQLite to MySQL seamlessly.
 
-    Smart Schema Deployment: Automatically creates all tables (Pages, Users, Settings, Themes, AI Providers, etc.) with pre-configured default values.
+---
 
-    Theme Settings Integration: Now pre-installs default theme configurations (colors, sidebar positions, footer links) into the database.
+## ⚙️ Installation
+1. Upload files to your server.
+2. Open your site in the browser.
+3. You will be redirected to `install.php` (Wizard).
+4. Follow the steps (Database Choice, Admin Setup).
+5. **Security:** Delete `install.php` after success.
 
-    Dynamic settings.php: Automatically detects your BASE_URL and BASE_PATH and updates your configuration file.
+---
 
-🤖 Admin AI Assistant
+## 🛠️ Technologies
+- **Backend:** PHP 8.3+
+- **Database:** SQLite / MySQL
+- **Frontend:** HTML5, CSS3 (Glassmorphism), Vanilla JS
+- **AI Integration:** OpenAI-compatible API support.
 
-    Integrated into the panel, capable of analyzing code errors and applying small patches directly to files using OpenRouter/OpenAI API.
+---
 
-🛡️ Smart Maintenance & Security
-
-    WAL Mode Support: Optimized SQLite performance to prevent database locks.
-
-    Auto-Installer Lock: Prevents re-installation if the system is already configured.
-
-📦 Core Features
-
-    Dual Database Engine → Use SQLite for lightweight portability or MySQL for heavy traffic.
-
-    Theme Management → Activate/deactivate themes and manage Theme Settings directly from the DB.
-
-    PWA Ready → Native support for manifest.json and service-worker.js.
-
-    Modular Architecture → Upload ZIP modules/themes through the admin panel.
-
-    User Roles → Granular control with Admin, Editor, and User roles.
-
-    Database Migration → Built-in wizard to move your data from SQLite to MySQL seamlessly.
-
-📚 Libraries Used
-
-    Bootstrap 5
-
-    Font Awesome 6
-
-    Chart.js
-
-    Marked.js & Highlight.js (for AI Chat UX)
-
-🛠️ Technologies
-
-    Backend: PHP 8.3+ (Optimized for modern performance)
-
-    Database: SQLite (File-based) or MySQL (Server-based)
-
-    AI Integration: OpenAI-compatible API support via Admin Panel.
+## 📚 Libraries Used
+- Bootstrap 5, Font Awesome 6, Chart.js, Marked.js, Highlight.js

@@ -200,11 +200,36 @@ function loadProviders() {
             if (data.status === 'success') {
                 existingProviders = data.providers;
                 renderProviderSelect();
+
+                // Render Personas
+                const personaSelect = document.getElementById('ai-persona-select');
+                if (personaSelect && data.personas) {
+                    personaSelect.innerHTML = '';
+                    data.personas.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.persona_key;
+                        opt.textContent = p.persona_name;
+                        personaSelect.appendChild(opt);
+                    });
+                }
             }
         } catch (e) {
             console.error("Provider load error", e);
         }
     });
+}
+
+function updateAIStatus(text) {
+    const statusDiv = document.getElementById('ai-thought-status');
+    const statusText = document.getElementById('status-text');
+    if (!statusDiv || !statusText) return;
+
+    if (text) {
+        statusText.textContent = text;
+        statusDiv.classList.remove('d-none');
+    } else {
+        statusDiv.classList.add('d-none');
+    }
 }
 
 function renderProviderSelect() {
@@ -278,6 +303,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Init Providers
     loadProviders();
     loadFiles();
+
+    // AI Bug Reporter - URL Redirect Handler
+    const urlParams = new URLSearchParams(window.location.search);
+    const bugMsg = urlParams.get('bug');
+    if (bugMsg && userInput) {
+        userInput.value = "Şu sistem hatasını analiz et ve çözüm öner: " + bugMsg;
+        // Optional: Trigger focus
+        userInput.focus();
+        // Clear param without reload
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search.replace(/&bug=[^&]*/, ""));
+    }
 
     // Provider Change Event
     if (providerSelect) {
@@ -417,12 +453,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CHAT LOGIC ---
 
     if (sendBtn) {
-        sendBtn.addEventListener('click', () => {
+        sendBtn.addEventListener('click', async () => {
             const text = userInput.value.trim();
             if (!text) return;
 
             appendMessage('user', text);
             userInput.value = '';
+            userInput.style.height = 'auto';
 
             const loadingId = 'loading-' + Date.now();
             const loadingDiv = document.createElement('div');
@@ -437,47 +474,204 @@ document.addEventListener('DOMContentLoaded', () => {
                 prompt: text,
                 files: selectedFiles,
                 provider: providerSelect ? providerSelect.value : 'gemini',
-                model: modelSelect ? modelSelect.value : ''
+                model: modelSelect ? modelSelect.value : '',
+                persona: document.getElementById('ai-persona-select')?.value || 'default',
+                stream: true
             };
 
-            $.ajax({
-                url: 'aisistem.php',
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify(payload),
-                success: function (response) {
-                    const lDiv = document.getElementById(loadingId);
-                    if (lDiv) lDiv.remove();
+            const abortController = new AbortController();
+            const signal = abortController.signal;
 
-                    try {
-                        let data;
-                        if (typeof response === 'object') {
-                            data = response;
-                        } else {
-                            data = JSON.parse(response);
-                        }
+            // Stop Button (assuming it exists or we add it)
+            let stopBtn = document.getElementById('btn-stop-ai');
+            if (stopBtn) {
+                stopBtn.classList.remove('d-none');
+                stopBtn.onclick = () => {
+                    abortController.abort();
+                    stopBtn.classList.add('d-none');
+                };
+            }
 
-                        if (data.status === 'success') {
-                            if (data.content) {
-                                appendMessage('ai', data.content);
-                            } else {
-                                appendMessage('ai', '_(Boş yanıt)_');
-                            }
-                        } else {
-                            appendMessage('ai', `**Hata:** ${data.message || 'Bilinmeyen hata.'}`);
-                        }
-                    } catch (e) {
-                        appendMessage('ai', `**Sistem Hatası:** ${e.message}`);
-                    }
-                },
-                error: function (xhr, status, error) {
-                    const lDiv = document.getElementById(loadingId);
-                    if (lDiv) lDiv.remove();
-                    appendMessage('ai', `**Hata:** Sunucu bağlantı hatası (${xhr.status}).`);
+            try {
+                updateAIStatus('Düşünülüyor ve hazırlık yapılıyor...');
+                // Auto-index before chat if cache is empty or stale (simple trigger)
+                if (fileListCache.length === 0) {
+                    fetch('aisistem.php', { method: 'POST', body: new URLSearchParams({ action: 'index_project' }) });
                 }
-            });
+
+                const response = await fetch('aisistem.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                    signal: signal
+                });
+
+                if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullContent = "";
+                let renderBuffer = "";
+                let lastRenderTime = 0;
+
+                // Prepare AI message bubble
+                loadingDiv.innerHTML = `<div class="avatar"><i class="fas fa-robot"></i></div><div class="message-content"></div>`;
+                const contentDiv = loadingDiv.querySelector('.message-content');
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) {
+                        updateAIStatus(false);
+                        break;
+                    }
+                    updateAIStatus('Yanıt akıtılıyor...');
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split("\n\n");
+
+                    lines.forEach(line => {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.substring(6));
+                                if (data.content) {
+                                    fullContent += data.content;
+
+                                    // Optimization: Only re-render every 50ms to save CPU
+                                    const now = Date.now();
+                                    if (now - lastRenderTime > 50) {
+                                        contentDiv.innerHTML = parseMarkdown(fullContent);
+                                        chatArea.scrollTop = chatArea.scrollHeight;
+                                        lastRenderTime = now;
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn("JSON parse error in stream", e);
+                            }
+                        }
+                    });
+                }
+
+                // Final render
+                contentDiv.innerHTML = parseMarkdown(fullContent);
+                if (stopBtn) stopBtn.classList.add('d-none');
+
+                // Final post-processing (copy buttons, diff blocks, syntax highlight)
+                loadingDiv.id = ""; // Remove loading ID
+                processAIMessage(loadingDiv, fullContent);
+
+            } catch (e) {
+                loadingDiv.innerHTML = `<div class="avatar"><i class="fas fa-robot"></i></div><div class="message-content text-danger">**Hata:** ${e.message}</div>`;
+            }
         });
     }
+
+    // Helper to process AI message after stream ends (or for static responses)
+    function processAIMessage(div, content) {
+        // Diff blocks [PATCH: ...]
+        const patchRegex = /(?:```\w*\s*)?\[PATCH:\s*(.*?)\]\s*\[OLD\]([\s\S]*?)\[\/OLD\]\s*\[NEW\]([\s\S]*?)\[\/NEW\]\s*(?:```)?/g;
+        let processedContent = content.replace(patchRegex, (match, filePath, oldCode, newCode) => {
+            const id = 'diff-' + Math.random().toString(36).substr(2, 9);
+            diffDataCache[id] = {
+                file: filePath.trim(),
+                old: oldCode.trim(),
+                new: newCode.trim()
+            };
+            return `\n\n<div class="card my-2 border-primary patch-card">
+                        <div class="card-body p-2 d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-file-code me-2"></i> ${filePath.trim()}</span>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-primary btn-sm" onclick="openDiffModal('${id}')">
+                                    <i class="fas fa-exchange-alt"></i> İncele
+                                </button>
+                                <button class="btn btn-success btn-sm" onclick="directApplyPatch('${id}')">
+                                    <i class="fas fa-bolt"></i> Uygula
+                                </button>
+                            </div>
+                        </div>
+                    </div>\n\n`;
+        });
+
+        div.querySelector('.message-content').innerHTML = parseMarkdown(processedContent);
+
+        // Code block enhancement
+        div.querySelectorAll('pre').forEach(pre => {
+            if (pre.querySelector('.code-actions-header')) return;
+
+            const codeEl = pre.querySelector('code');
+            const code = codeEl.innerText;
+            const langClass = Array.from(codeEl.classList).find(c => c.startsWith('language-')) || 'language-javascript';
+            const lang = langClass.replace('language-', '');
+
+            const btnWrapper = document.createElement('div');
+            btnWrapper.className = 'code-actions-header d-flex justify-content-between align-items-center px-2 py-1 bg-dark text-white small';
+            btnWrapper.innerHTML = `
+                <span class="text-uppercase tiny">${lang}</span>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-link btn-sm p-0 text-white copy-btn" title="Kopyala"><i class="far fa-copy"></i></button>
+                    <button class="btn btn-link btn-sm p-0 text-white edit-btn" title="CodeMirror ile Aç"><i class="fas fa-code"></i></button>
+                </div>
+            `;
+
+            btnWrapper.querySelector('.copy-btn').onclick = () => {
+                navigator.clipboard.writeText(code);
+                btnWrapper.querySelector('.copy-btn').innerHTML = '<i class="fas fa-check"></i>';
+                setTimeout(() => btnWrapper.querySelector('.copy-btn').innerHTML = '<i class="far fa-copy"></i>', 2000);
+            };
+
+            btnWrapper.querySelector('.edit-btn').onclick = () => {
+                if (typeof CodeMirror !== 'undefined') {
+                    pre.innerHTML = '';
+                    const cm = CodeMirror(pre, {
+                        value: code,
+                        mode: lang === 'php' ? 'application/x-httpd-php' : lang,
+                        theme: 'monokai',
+                        lineNumbers: true,
+                        readOnly: false,
+                        viewportMargin: Infinity
+                    });
+                    pre.appendChild(btnWrapper);
+                }
+            };
+
+            pre.insertBefore(btnWrapper, pre.firstChild);
+
+            if (typeof hljs !== 'undefined') {
+                hljs.highlightElement(codeEl);
+            }
+        });
+
+        chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    async function directApplyPatch(id) {
+        const data = diffDataCache[id];
+        if (!data) return;
+
+        if (!confirm(`${data.file} dosyasına bu değişiklik doğrudan uygulansın mı?`)) return;
+
+        try {
+            const res = await fetch('aisistem.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    action: 'apply_ai_patch',
+                    file_path: data.file,
+                    old_code: data.old,
+                    new_code: data.new
+                })
+            });
+            const result = await res.json();
+            if (result.status === 'success') {
+                alert('Başarıyla uygulandı!');
+            } else {
+                alert('Hata: ' + result.message);
+            }
+        } catch (e) {
+            alert('Hata: ' + e.message);
+        }
+    }
+
+    window.directApplyPatch = directApplyPatch;
 
     // Auto-resize textarea
     if (userInput) {
@@ -495,7 +689,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- APPLY PATCH DELEGATED ---
-    const btnApplyPatch = document.querySelector('#modal-diff-view .btn-success');
+    const btnApplyPatch = document.getElementById('btn-apply-diff');
     if (btnApplyPatch) {
         btnApplyPatch.addEventListener('click', () => {
             const id = btnApplyPatch.dataset.currentDiffId;

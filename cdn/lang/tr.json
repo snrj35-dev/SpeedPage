@@ -420,5 +420,7 @@
     "copyright_default": "© 2026 SpeedPage",
     "choose_theme": "Tema Seç",
     "system_default": "Sistem Varsayılanı",
-    "security_install_file_warning": "⚠️ GÜVENLİK UYARISI: install.php dosyası sunucuda tespit edildi! Lütfen güvenliğiniz için bu dosyayı siliniz."
+    "security_install_file_warning": "⚠️ GÜVENLİK UYARISI: install.php dosyası sunucuda tespit edildi! Lütfen güvenliğiniz için bu dosyayı siliniz.",
+    "access_denied": "Erişim Engellendi",
+    "module_permission_error": "Bu modüle erişmek için gerekli yetkiye sahip değilsiniz."
 }

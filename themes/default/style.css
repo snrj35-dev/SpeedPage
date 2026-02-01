@@ -197,6 +197,124 @@ body {
   background-color: var(--navbar-bg);
 }
 
+/* =============================
+   GLOBAL NOTIFICATIONS (Core)
+   Used by navbar notification UI
+============================= */
+.notifications-wrapper {
+  position: relative;
+  display: inline-block;
+  margin-right: 15px;
+}
+
+.notifications-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 5px;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.2s;
+}
+
+.notifications-btn:hover {
+  transform: scale(1.1);
+  color: var(--bs-primary);
+}
+
+.notifications-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background: #dc3545;
+  color: white;
+  font-size: 10px;
+  padding: 2px 5px;
+  border-radius: 10px;
+  border: 2px solid var(--bs-body-bg);
+}
+
+.notifications-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  width: 320px;
+  background: var(--bs-card-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: 8px;
+  box-shadow: var(--bs-box-shadow);
+  display: none;
+  z-index: 1070;
+  margin-top: 10px;
+  overflow: hidden;
+}
+
+.notifications-dropdown.active {
+  display: block;
+  animation: forumFadeIn 0.2s ease-out;
+}
+
+.notifications-header {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--bs-border-color);
+  font-weight: bold;
+  background: var(--bs-tertiary-bg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.notifications-list {
+  max-height: 350px;
+  overflow-y: auto;
+}
+
+.notifications-item {
+  padding: 12px 15px;
+  border-bottom: 1px solid var(--bs-border-color);
+  display: flex;
+  text-decoration: none !important;
+  color: inherit !important;
+  transition: background 0.2s;
+}
+
+.notifications-item:hover {
+  background: rgba(var(--bs-primary-rgb), 0.05);
+}
+
+.notifications-item.unread {
+  background: rgba(var(--bs-primary-rgb), 0.02);
+  border-left: 3px solid var(--bs-primary);
+}
+
+.notifications-avatar {
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  background: var(--bs-secondary-bg);
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.notifications-content {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+@keyframes forumFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .hero-banner {
   position: relative;
   padding: 10px;

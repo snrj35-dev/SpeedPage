@@ -1,55 +1,73 @@
 :root {
     /* Ana Renkler */
-    --primary: #4f46e5;         /* Canlı Indigo */
+    --primary: #4f46e5;
+    /* Canlı Indigo */
     --primary-hover: #4338ca;
     --primary-light: #eef2ff;
-    
+
     /* Arka Planlar */
-    --bg: #f8fafc;              /* Slate 50 */
-    --bg-soft: #ffffff;         /* Saf Beyaz */
+    --bg: #f8fafc;
+    /* Slate 50 */
+    --bg-soft: #ffffff;
+    /* Saf Beyaz */
     --card: #ffffff;
-    
+
     /* Metin Renkleri */
-    --text: #0f172a;            /* Slate 900 */
-    --text-muted: #64748b !important;      /* Slate 500 */
+    --text: #0f172a;
+    /* Slate 900 */
+    --text-muted: #64748b !important;
+    /* Slate 500 */
     --bs-secondary-color: #64748b !important;
 
     /* Semantik (Durum) Renkleri */
-    --success: #10b981;         /* Emerald 500 */
-    --danger: #ef4444;          /* Rose 500 */
-    --warning: #f59e0b;         /* Amber 500 */
-    --info: #0ea5e9;            /* Sky 500 */
-    
+    --success: #10b981;
+    /* Emerald 500 */
+    --danger: #ef4444;
+    /* Rose 500 */
+    --warning: #f59e0b;
+    /* Amber 500 */
+    --info: #0ea5e9;
+    /* Sky 500 */
+
     /* Yardımcılar */
-    --border: #e2e8f0;          /* Slate 200 */
+    --border: #e2e8f0;
+    /* Slate 200 */
     --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-    --radius: 12px;             /* */
+    --radius: 12px;
+    /* */
     --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 [data-theme="dark"] {
     /* Ana Renkler */
-    --primary: #818cf8;         /* Indigo 400 */
+    --primary: #818cf8;
+    /* Indigo 400 */
     --primary-hover: #a5b4fc;
     --primary-light: rgba(79, 70, 229, 0.1);
-    
+
     /* Arka Planlar */
-    --bg: #0b0f1a;              /* Çok Derin Lacivert */
-    --bg-soft: #161e2d;         /* */
+    --bg: #0b0f1a;
+    /* Çok Derin Lacivert */
+    --bg-soft: #161e2d;
+    /* */
     --card: #1c2537;
-    
+
     /* Metin Renkleri */
-    --text: #f8fafc;            /* Slate 50 */
-    --text-muted: #94a3b8 !important;      /* Slate 400 */
+    --text: #f8fafc;
+    /* Slate 50 */
+    --text-muted: #94a3b8 !important;
+    /* Slate 400 */
     --bs-secondary-color: #94a3b8 !important;
     /* Semantik Renkler (Dark Mode için optimize edildi) */
     --success: #34d399;
     --danger: #fb7185;
     --warning: #fbbf24;
-    --info: #38bdf8;            /* */
-    
+    --info: #38bdf8;
+    /* */
+
     /* Yardımcılar */
-    --border: #2d3748;          /* Slate 700 */
+    --border: #2d3748;
+    /* Slate 700 */
     --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
 }
 
@@ -634,6 +652,7 @@ textarea:focus {
 .browser-card:hover {
     transform: translateY(-5px);
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    z-index: 2;
 }
 
 .browser-icon {
@@ -915,11 +934,11 @@ textarea:focus {
 
     .sp-responsive-table td {
         display: flex !important;
-    justify-content: space-between;
-    align-items: center;
-    padding: 7px 25%;
-    border-bottom: 1px solid var(--bg) !important;
-    text-align: right !important;
+        justify-content: space-between;
+        align-items: center;
+        padding: 7px 25%;
+        border-bottom: 1px solid var(--bg) !important;
+        text-align: right !important;
     }
 
     .sp-responsive-table td:last-child {
@@ -933,8 +952,9 @@ textarea:focus {
         color: var(--text-muted);
         font-size: 0.8rem;
     }
-    .d-flex.justify-content-between{
-      display: inline-block !important;
+
+    .d-flex.justify-content-between {
+        display: inline-block !important;
     }
 }
 

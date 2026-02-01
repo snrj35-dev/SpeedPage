@@ -30,11 +30,11 @@ $siteName = trim($settings['site_name'] ?? 'SpeedPage');
                 $url = ($settings['friendly_url'] === '1') ? (BASE_PATH . $m['slug']) : (BASE_URL . 'index.php?page=' . $m['slug']);
             }
             ?>
-            <a href="<?= htmlspecialchars($url) ?>" class="nav-link px-3 fw-medium">
+            <a href="<?= e($url) ?>" class="nav-link px-3 fw-medium">
                 <?php if (!empty($m['icon'])): ?>
-                    <i class="fa <?= htmlspecialchars($m['icon']) ?> me-1 small opacity-75"></i>
+                    <i class="fa <?= e($m['icon']) ?> me-1 small opacity-75"></i>
                 <?php endif; ?>
-                <?= htmlspecialchars($m['title']) ?>
+                <?= e($m['title']) ?>
             </a>
         <?php endforeach; ?>
     </div>
@@ -63,16 +63,16 @@ $siteName = trim($settings['site_name'] ?? 'SpeedPage');
                     class="d-flex align-items-center text-decoration-none me-2">
                     <div class="nav-avatar-circle bg-primary text-white d-flex align-items-center justify-content-center me-md-2 shadow-sm"
                         style="width: 32px; height: 32px; border-radius: 50%; font-size: 12px;">
-                        <i class="fas <?= htmlspecialchars($finalAvatar) ?>"></i>
+                        <i class="fas <?= e($finalAvatar) ?>"></i>
                     </div>
-                    <span class="fw-bold d-none d-md-inline small"><?= htmlspecialchars($finalName) ?></span>
+                    <span class="fw-bold d-none d-md-inline small"><?= e($finalName) ?></span>
                 </a>
                 <div class="vr mx-2 opacity-25 d-none d-sm-block" style="height: 20px;"></div>
                 <?php if ($_SESSION['role'] === 'admin'): ?>
-                    <a href="<?= BASE_URL ?>admin/index.php" class="btn btn-sm rounded-circle me-1 me-md-2"
+                    <a href="<?= e(BASE_URL) ?>admin/index.php" class="btn btn-sm rounded-circle me-1 me-md-2"
                         title="Yönetim Paneli"><i class="fa-solid fa-gauge-high"></i></a>
                 <?php endif; ?>
-                <a href="<?= BASE_URL ?>php/logout.php" class="btn btn-sm rounded-circle text-danger" title="Çıkış Yap"><i
+                <a href="<?= e(BASE_URL) ?>php/logout.php" class="btn btn-sm rounded-circle text-danger" title="Çıkış Yap"><i
                         class="fa-solid fa-right-from-bracket"></i></a>
             </div>
         <?php endif; ?>
@@ -94,7 +94,7 @@ $siteName = trim($settings['site_name'] ?? 'SpeedPage');
             <i class="fas fa-times fs-4"></i>
         </button>
         <span class="fw-bold h5 mb-0">
-            <?= htmlspecialchars($siteName) ?>
+            <?= e($siteName) ?>
         </span>
     </div>
     <div class="sidebar-body p-3">
@@ -134,24 +134,5 @@ $siteName = trim($settings['site_name'] ?? 'SpeedPage');
 </div>
 <div id="mobile-sidebar-overlay" class="mobile-sidebar-overlay"></div>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const toggleBtn = document.getElementById('mobile-menu-toggle');
-        const closeBtn = document.getElementById('mobile-menu-close');
-        const sidebar = document.getElementById('mobile-sidebar');
-        const overlay = document.getElementById('mobile-sidebar-overlay');
-
-        function toggleSidebar() {
-            sidebar.classList.toggle('active');
-            overlay.classList.toggle('active');
-            document.body.style.overflow = sidebar.classList.contains('active') ? 'hidden' : '';
-        }
-
-        if (toggleBtn) toggleBtn.addEventListener('click', toggleSidebar);
-        if (closeBtn) closeBtn.addEventListener('click', toggleSidebar);
-        if (overlay) overlay.classList.remove('active'); // Reset on load
-
-        // Close sidebar on overlay click
-        overlay.addEventListener('click', toggleSidebar);
-    });
-</script>
+<div id="mobile-sidebar-overlay" class="mobile-sidebar-overlay"></div>
+<?php /* JS moved to cdn/js/navbar.js */ ?>
