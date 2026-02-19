@@ -16,12 +16,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode(["status" => "error", "message" => __('csrf_error'), "message_key" => "csrf_error"]);
         exit;
     }
+    if (empty($is_admin) || !$is_admin) {
+        echo json_encode(["status" => "error", "message" => __('access_denied'), "message_key" => "access_denied"]);
+        exit;
+    }
 } else {
     exit;
 }
 
 if ($action === 'activate_theme') {
     handleActivateTheme($db);
+} elseif ($action === 'upload') {
+    handleUploadTheme($db);
 } elseif ($action === 'duplicate_theme') {
     handleDuplicateTheme($db);
 } elseif ($action === 'delete_theme') {
@@ -31,6 +37,162 @@ if ($action === 'activate_theme') {
 }
 
 exit;
+
+function ensureWritableDirectory(string $dir, string $label): void
+{
+    if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+        throw new RuntimeException($label . " oluşturulamadı: " . $dir);
+    }
+    if (!is_writable($dir)) {
+        throw new RuntimeException($label . " yazılabilir değil: " . $dir);
+    }
+}
+
+function handleUploadTheme(PDO $db): void
+{
+    $extractPath = null;
+    try {
+        if (!isset($_FILES['module_zip']) || $_FILES['module_zip']['error'] !== UPLOAD_ERR_OK) {
+            throw new Exception(__('upload_error'), 400);
+        }
+
+        $zipFile = $_FILES['module_zip']['tmp_name'];
+        $zip = new ZipArchive();
+        if ($zip->open($zipFile) !== true) {
+            throw new Exception(__('zip_open_failed'), 400);
+        }
+
+        $configContent = '';
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $zipName = $zip->getNameIndex($i);
+            if ($zipName === 'theme.json') {
+                $configContent = $zip->getFromIndex($i);
+            }
+            if (isUnsafeZipEntry((string) $zipName)) {
+                throw new Exception("Security Error: Path Traversal detected in ZIP");
+            }
+        }
+
+        if (!$configContent) {
+            $zip->close();
+            throw new Exception("Configuration file (theme.json) not found in package.", 400);
+        }
+
+        $config = json_decode($configContent, true);
+        if (!is_array($config)) {
+            $zip->close();
+            throw new Exception("Invalid JSON in theme.json", 400);
+        }
+
+        ensureWritableDirectory(TEMP_DIR, 'Temp klasörü');
+        $extractPath = TEMP_DIR . "theme_" . bin2hex(random_bytes(8));
+        if (!is_dir($extractPath) && !mkdir($extractPath, 0755, true)) {
+            $zip->close();
+            throw new Exception("Failed to create temp dir", 500);
+        }
+        extractZipSafely($zip, $extractPath);
+        $zip->close();
+
+        $slug = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string) ($config['name'] ?? ''));
+        if (!$slug) {
+            throw new Exception("Invalid theme name", 400);
+        }
+
+        $targetDir = ROOT_DIR . "themes/" . $slug;
+        if (is_dir($targetDir)) {
+            recursiveDelete($targetDir);
+        }
+        mkdir($targetDir, 0755, true);
+        recursiveCopy($extractPath, $targetDir);
+
+        if (function_exists('sp_log')) {
+            sp_log("Theme uploaded: $slug", "theme_upload", null, $slug);
+        }
+        echo json_encode(["status" => "success", "message" => __('install_success')]);
+    } catch (Throwable $e) {
+        if (function_exists('sp_log')) {
+            sp_log("Theme upload error: " . $e->getMessage(), "system_error");
+        }
+        echo json_encode(["status" => "error", "message" => $e->getMessage()]);
+    } finally {
+        if ($extractPath && is_dir($extractPath)) {
+            recursiveDelete($extractPath);
+        }
+    }
+}
+
+function isUnsafeZipEntry(string $name): bool
+{
+    $name = str_replace('\\', '/', $name);
+    if ($name === '' || str_starts_with($name, '/')) {
+        return true;
+    }
+    if (preg_match('/^[A-Za-z]:\//', $name)) {
+        return true;
+    }
+    if (strpos($name, "\0") !== false) {
+        return true;
+    }
+    foreach (explode('/', $name) as $part) {
+        if ($part === '..') {
+            return true;
+        }
+    }
+    return false;
+}
+
+function extractZipSafely(ZipArchive $zip, string $destination): void
+{
+    $base = realpath($destination);
+    if ($base === false) {
+        throw new RuntimeException('Invalid extraction base');
+    }
+
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $entry = $zip->getNameIndex($i);
+        if ($entry === false) {
+            continue;
+        }
+        $entry = str_replace('\\', '/', $entry);
+        $entry = ltrim($entry, '/');
+        if (isUnsafeZipEntry($entry)) {
+            throw new RuntimeException('Unsafe ZIP entry');
+        }
+        if ($entry === '') {
+            continue;
+        }
+
+        $target = $base . '/' . $entry;
+        if (str_ends_with($entry, '/')) {
+            if (!is_dir($target) && !mkdir($target, 0755, true)) {
+                throw new RuntimeException('Directory create failed');
+            }
+            continue;
+        }
+
+        $dir = dirname($target);
+        if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+            throw new RuntimeException('Directory create failed');
+        }
+        $dirReal = realpath($dir);
+        if ($dirReal === false || !str_starts_with($dirReal, $base)) {
+            throw new RuntimeException('Unsafe extraction target');
+        }
+
+        $in = $zip->getStream($zip->getNameIndex($i));
+        if (!$in) {
+            throw new RuntimeException('ZIP stream read failed');
+        }
+        $out = fopen($target, 'wb');
+        if (!$out) {
+            fclose($in);
+            throw new RuntimeException('Target write failed');
+        }
+        stream_copy_to_stream($in, $out);
+        fclose($in);
+        fclose($out);
+    }
+}
 
 function handleActivateTheme(PDO $db): void
 {
@@ -133,10 +295,8 @@ function handleRemoteInstallTheme(PDO $db): void
             throw new Exception("Security Error: Domain not allowed. Only GitHub Raw is permitted.");
         }
 
-        $tmpFile = ROOT_DIR . '_temp/remote_' . bin2hex(random_bytes(8)) . '.zip';
-        if (!is_dir(ROOT_DIR . '_temp/')) {
-            mkdir(ROOT_DIR . '_temp/', 0755, true);
-        }
+        ensureWritableDirectory(TEMP_DIR, 'Temp klasörü');
+        $tmpFile = TEMP_DIR . 'remote_' . bin2hex(random_bytes(8)) . '.zip';
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -151,11 +311,13 @@ function handleRemoteInstallTheme(PDO $db): void
             throw new Exception(__('download_error') . " (HTTP $httpCode)", 400);
         }
 
-        file_put_contents($tmpFile, $data);
+        if (file_put_contents($tmpFile, $data) === false) {
+            throw new Exception("Remote ZIP dosyası temp dizinine yazılamadı: " . $tmpFile, 500);
+        }
 
         $zip = new ZipArchive();
         if ($zip->open($tmpFile) !== true) {
-            unlink($tmpFile);
+            @unlink($tmpFile);
             throw new Exception(__('zip_error'), 400);
         }
 
@@ -165,33 +327,36 @@ function handleRemoteInstallTheme(PDO $db): void
             if ($zipName === 'theme.json') {
                 $configContent = $zip->getFromIndex($i);
             }
-            if (strpos($zipName, '..') !== false) {
+            if (isUnsafeZipEntry($zipName)) {
                 throw new Exception("Security Error: Path Traversal detected in ZIP");
             }
         }
 
         if (!$configContent) {
             $zip->close();
-            unlink($tmpFile);
+            @unlink($tmpFile);
             throw new Exception("Configuration file (theme.json) not found in package.", 400);
         }
 
         $config = json_decode($configContent, true);
         if (!$config) {
             $zip->close();
-            unlink($tmpFile);
+            @unlink($tmpFile);
             throw new Exception("Invalid JSON in theme.json", 400);
         }
 
-        $extractPath = ROOT_DIR . "_temp/ext_" . bin2hex(random_bytes(8));
-        mkdir($extractPath, 0755, true);
-        $zip->extractTo($extractPath);
+        $extractPath = TEMP_DIR . "ext_" . bin2hex(random_bytes(8));
+        if (!mkdir($extractPath, 0755, true)) {
+            throw new Exception("Extract temp klasörü oluşturulamadı: " . $extractPath, 500);
+        }
+        extractZipSafely($zip, $extractPath);
         $zip->close();
-        unlink($tmpFile);
+        @unlink($tmpFile);
 
         $slug = preg_replace('/[^a-zA-Z0-9_\-]/', '', $config['name'] ?? $name);
         $targetDir = ROOT_DIR . "themes/" . $slug;
 
+        ensureWritableDirectory(ROOT_DIR . "themes/", 'Themes klasörü');
         if (is_dir($targetDir)) {
             recursiveDelete($targetDir);
         }

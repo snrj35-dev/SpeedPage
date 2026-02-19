@@ -511,7 +511,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let fullContent = "";
-                let renderBuffer = "";
+                let rawResponse = "";
+                let sseBuffer = "";
                 let lastRenderTime = 0;
 
                 // Prepare AI message bubble
@@ -527,12 +528,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     updateAIStatus('Yanıt akıtılıyor...');
 
                     const chunk = decoder.decode(value, { stream: true });
-                    const lines = chunk.split("\n\n");
+                    rawResponse += chunk;
+                    sseBuffer += chunk;
+                    const packets = sseBuffer.split("\n\n");
+                    sseBuffer = packets.pop() || "";
 
-                    lines.forEach(line => {
-                        if (line.startsWith('data: ')) {
+                    packets.forEach(packet => {
+                        const lines = packet.split("\n");
+                        lines.forEach(line => {
+                            if (!line.startsWith('data: ')) return;
                             try {
-                                const data = JSON.parse(line.substring(6));
+                                const payload = line.substring(6).trim();
+                                if (!payload || payload === '[DONE]') return;
+                                const data = JSON.parse(payload);
                                 if (data.content) {
                                     fullContent += data.content;
 
@@ -545,10 +553,27 @@ document.addEventListener('DOMContentLoaded', () => {
                                     }
                                 }
                             } catch (e) {
-                                console.warn("JSON parse error in stream", e);
+                                // Non-SSE JSON responses are handled in final fallback block.
                             }
-                        }
+                        });
                     });
+                }
+
+                if (!fullContent && rawResponse.trim()) {
+                    try {
+                        const parsed = JSON.parse(rawResponse);
+                        if (parsed.content) {
+                            fullContent = parsed.content;
+                        } else if (parsed.message) {
+                            fullContent = `Hata: ${parsed.message}`;
+                        }
+                    } catch (e) {
+                        // keep empty; handled below
+                    }
+                }
+
+                if (!fullContent) {
+                    fullContent = 'Hata: Sunucudan okunabilir bir yanıt alınamadı.';
                 }
 
                 // Final render
@@ -657,7 +682,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     action: 'apply_ai_patch',
                     file_path: data.file,
                     old_code: data.old,
-                    new_code: data.new
+                    new_code: data.new,
+                    csrf: (typeof AI_CSRF_TOKEN !== 'undefined' ? AI_CSRF_TOKEN : '')
                 })
             });
             const result = await res.json();
@@ -705,7 +731,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 action: 'apply_ai_patch',
                 file_path: currentDiffData.file,
                 old_code: currentDiffData.old,
-                new_code: currentDiffData.new
+                new_code: currentDiffData.new,
+                csrf: (typeof AI_CSRF_TOKEN !== 'undefined' ? AI_CSRF_TOKEN : '')
             }, (res) => {
                 btnApplyPatch.disabled = false;
                 btnApplyPatch.innerHTML = '<i class="fas fa-check"></i> Değişiklikleri Dosyaya Yaz';

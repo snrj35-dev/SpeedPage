@@ -23,6 +23,17 @@
 
                     <!-- Alert Area -->
                     <div id="wizard-alert" class="alert d-none"></div>
+                    <div class="alert alert-secondary">
+                        <div class="row g-2 align-items-center">
+                            <div class="col-md-5">
+                                <strong>Güvenlik Onayı:</strong> Finalize / Rollback için mevcut admin şifresi gerekir.
+                            </div>
+                            <div class="col-md-7">
+                                <input type="password" id="migrationAdminPassword" class="form-control"
+                                    placeholder="Mevcut admin şifreniz">
+                            </div>
+                        </div>
+                    </div>
 
                     <!-- STEP 1: CONFIGURATION -->
                     <div id="step-1" class="wizard-step">
@@ -130,6 +141,7 @@
 
 <script>
     const API_URL = 'migration-process.php';
+    const CSRF_TOKEN = '<?= e($_SESSION['csrf']) ?>';
     let TABLES = []; // To store table list
 
     // JS side translations helper
@@ -153,6 +165,7 @@
     function testConnection() {
         const formData = new FormData(document.getElementById('db-config-form'));
         formData.append('action', 'connect');
+        formData.append('csrf', CSRF_TOKEN);
 
         $('#wizard-alert').addClass('d-none');
 
@@ -177,7 +190,7 @@
     }
 
     function startSchemaMigration() {
-        $.post(API_URL, { action: 'prepare_schema' }, function (res) {
+        $.post(API_URL, { action: 'prepare_schema', csrf: CSRF_TOKEN }, function (res) {
             if (res.status === 'success') {
                 res.logs.forEach(l => log('schema-log', l));
                 TABLES = res.tables;
@@ -222,7 +235,7 @@
     }
 
     function migrateTableChunk(table, offset, progressId, onComplete) {
-        $.post(API_URL, { action: 'migrate_data', table: table, offset: offset }, function (res) {
+        $.post(API_URL, { action: 'migrate_data', table: table, offset: offset, csrf: CSRF_TOKEN }, function (res) {
             if (res.status === 'success') {
                 // Update progress
                 let percent = 0;
@@ -250,7 +263,12 @@
     }
 
     function finalizeMigration() {
-        $.post(API_URL, { action: 'finalize' }, function (res) {
+        const adminPass = ($('#migrationAdminPassword').val() || '').toString();
+        if (!adminPass) {
+            alert('Lütfen admin şifresini girin.');
+            return;
+        }
+        $.post(API_URL, { action: 'finalize', csrf: CSRF_TOKEN, current_password: adminPass }, function (res) {
             if (res.status === 'success') {
                 showStep(4, 100, 'completed');
             } else {
@@ -261,7 +279,12 @@
 
     function rollbackSystem() {
         if (confirm(t('rollback_confirm'))) {
-            $.post(API_URL, { action: 'rollback' }, function (res) {
+            const adminPass = ($('#migrationAdminPassword').val() || '').toString();
+            if (!adminPass) {
+                alert('Lütfen admin şifresini girin.');
+                return;
+            }
+            $.post(API_URL, { action: 'rollback', csrf: CSRF_TOKEN, current_password: adminPass }, function (res) {
                 alert(res.message);
                 if (res.status === 'success') {
                     location.reload();

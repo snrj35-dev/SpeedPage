@@ -207,7 +207,7 @@
     "site_slogan_desc": "A short slogan that will appear on the homepage and in some areas.",
     "site_status": "Site Status",
     "site_status_desc": "You can make the site public or visible only to logged-in users.",
-    "site_version": "SpeedPage 0.3 Alpha",
+    "site_version": "SpeedPage 0.4",
     "sluglabel": "Slug (URL)",
     "sql_console": "SQL Console",
     "sql_empty": "SQL is empty",

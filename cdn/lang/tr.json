@@ -209,7 +209,7 @@
     "site_slogan_desc": "Ana sayfada ve bazı alanlarda görünecek kısa slogan.",
     "site_status": "Site Durumu",
     "site_status_desc": "Siteyi herkese açabilir veya sadece giriş yapmış kullanıcılara görünür yapabilirsiniz.",
-    "site_version": "SpeedPage 0.3 Alpha",
+    "site_version": "SpeedPage 0.4",
     "sluglabel": "Slug (URL)",
     "sql_console": "SQL Konsolu",
     "sql_empty": "SQL boş",

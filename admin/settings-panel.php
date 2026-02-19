@@ -213,6 +213,16 @@ if (defined('LANG_DIR') && is_dir(LANG_DIR)) {
                                     Ver</label>
                             </div>
                             <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" name="allow_page_php" value="1"
+                                    <?= ($config['allow_page_php'] ?? '0') == '1' ? 'checked' : '' ?>>
+                                <label class="form-check-label">Sayfa İçeriğinde PHP Çalıştırmaya İzin Ver (Riskli)</label>
+                            </div>
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" name="allow_module_php_scripts" value="1"
+                                    <?= ($config['allow_module_php_scripts'] ?? '0') == '1' ? 'checked' : '' ?>>
+                                <label class="form-check-label">Modül install/migration/uninstall PHP script çalıştırmaya izin ver (Çok Riskli)</label>
+                            </div>
+                            <div class="form-check form-switch mb-3">
                                 <input class="form-check-input" type="checkbox" name="login_captcha" value="1"
                                     <?= ($config['login_captcha'] ?? '0') == '1' ? 'checked' : '' ?>>
                                 <label class="form-check-label" lang="login_captcha_required">Girişte Captcha

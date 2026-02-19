@@ -13,6 +13,9 @@ if (isset($is_admin) && !$is_admin) {
 ?>
 
 <div class="row h-100 g-0">
+    <script>
+        const AI_CSRF_TOKEN = '<?= e($_SESSION['csrf']) ?>';
+    </script>
     <!-- Left Panel: Chat -->
     <div class="col-md-9 d-flex flex-column h-100" style="min-height: calc(100vh - 120px);">
         <div class="card shadow-sm flex-grow-1 d-flex flex-column m-2 rounded-4 overflow-hidden border-0">
@@ -115,6 +118,12 @@ if (isset($is_admin) && !$is_admin) {
                     </div>
 
                     <!-- Model Select -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-muted">Model</label>
+                        <select class="form-select form-select-sm" id="ai-model-select">
+                            <option value="">Model yükleniyor...</option>
+                        </select>
+                    </div>
 
                     <button class="btn btn-xs btn-outline-primary w-100" id="btn-manage-providers">
                         <i class="fas fa-key me-1"></i> <span lang="ai_manage_keys">Anahtarları Yönet</span>

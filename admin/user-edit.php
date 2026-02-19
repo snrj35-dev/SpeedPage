@@ -12,6 +12,11 @@ global $db;
 header('Content-Type: application/json; charset=utf-8');
 
 try {
+    if (empty($is_admin) || !$is_admin) {
+        echo json_encode(['ok' => false, 'error' => 'ACCESS_DENIED', 'message_key' => 'access_denied'], JSON_THROW_ON_ERROR);
+        exit;
+    }
+
     $method = $_SERVER['REQUEST_METHOD'];
     // $userId'yi almaya gerek yok, sp_log session'dan okur.
 

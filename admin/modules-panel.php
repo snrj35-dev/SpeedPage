@@ -19,6 +19,15 @@ try {
 ?>
 
 <div class="container py-3">
+    <?php if (($config['allow_module_php_scripts'] ?? '0') !== '1'): ?>
+        <div class="alert alert-warning border-0 shadow-sm rounded-4 mb-4">
+            <i class="fas fa-triangle-exclamation me-2"></i>
+            Bazı modüller kurulum/migration/uninstall için PHP script gerektirir. Bu işlemler şu an kapalı.
+            Gerekirse <strong>Ayarlar &gt; Güvenlik</strong> bölümünden
+            <strong>Modül install/migration/uninstall PHP script çalıştırmaya izin ver</strong> seçeneğini açın.
+        </div>
+    <?php endif; ?>
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h4 class="fw-bold text-primary mb-0">
             <i class="fas fa-puzzle-piece me-2"></i> <span lang="module_management">Modül Yönetimi</span>
@@ -175,7 +184,8 @@ try {
 </div>
 
 <script>
-    const csrfToken = '<?= $_SESSION['csrf'] ?>';
+    const CSRF_TOKEN = '<?= $_SESSION['csrf'] ?>';
+    const csrfToken = CSRF_TOKEN;
 
     function uploadModule(e) {
         e.preventDefault();

@@ -211,7 +211,8 @@ $activeTheme = $settings['active_theme'] ?? 'default';
 
 
 <script>
-    const csrfToken = '<?= $_SESSION['csrf'] ?>';
+    const CSRF_TOKEN = '<?= $_SESSION['csrf'] ?>';
+    const csrfToken = CSRF_TOKEN;
 
     function uploadTheme(e) {
         e.preventDefault();

@@ -9,6 +9,7 @@ require_once __DIR__ . '/db.php';
 global $db;
 
 try {
+    $allowPagePhp = false;
     $pages = $db->query("SELECT * FROM pages ORDER BY sort_order, slug")->fetchAll(PDO::FETCH_ASSOC);
 
     // Menüleri Çek
@@ -26,6 +27,15 @@ try {
     }
     // Custom Snippets
     $customSnippets = $db->query("SELECT * FROM custom_snippets ORDER BY title")->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $keyColumn = ($driver === 'mysql') ? '`key`' : 'key';
+        $stmtPhp = $db->prepare("SELECT value FROM settings WHERE {$keyColumn} = ? LIMIT 1");
+        $stmtPhp->execute(['allow_page_php']);
+        $allowPagePhp = ((string) $stmtPhp->fetchColumn() === '1');
+    } catch (Throwable) {
+        $allowPagePhp = false;
+    }
     ?>
     <script>
         var GLOBAL_SNIPPETS = <?= json_encode($customSnippets, JSON_THROW_ON_ERROR) ?>;
@@ -39,6 +49,7 @@ try {
     $menus = [];
     $menuLocations = [];
     $customSnippets = [];
+    $allowPagePhp = false;
 }
 
 // Asset Taraması
@@ -222,6 +233,11 @@ $jsFiles = glob(__DIR__ . '/../cdn/js/*.js') ?: [];
                                 </select>
                             </div>
                         </div>
+                        <?php if (empty($allowPagePhp)): ?>
+                            <div class="alert alert-warning mt-3">
+                                <strong>Güvenlik Modu:</strong> Bu alanda PHP kodu kaydedilemez.
+                            </div>
+                        <?php endif; ?>
                         <textarea name="icerik" id="new_content" rows="18" class="form-control code-font shadow-sm"
                             style="font-family: 'Fira Code', monospace; border-radius: 12px; border: 1px solid #e0e0e0;"></textarea>
                     </div>
@@ -542,6 +558,11 @@ $jsFiles = glob(__DIR__ . '/../cdn/js/*.js') ?: [];
                                 <!-- Snippet Select Will be loaded here -->
                             </div>
                         </div>
+                        <?php if (empty($allowPagePhp)): ?>
+                            <div class="alert alert-warning">
+                                <strong>Güvenlik Modu:</strong> PHP içerik kaydı kapalıdır.
+                            </div>
+                        <?php endif; ?>
                         <textarea name="content" id="edit_content" rows="18" class="form-control code-font shadow-sm"
                             style="border-radius: 12px; border: 1px solid #e0e0e0;"></textarea>
                     </div>

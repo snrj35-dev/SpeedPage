@@ -436,11 +436,26 @@ try {
                             <p class='text-muted'>" . __('module_permission_error') . "</p>
                         </div>";
                     } else {
-                        $modFile = ROOT_DIR . "modules/" . $modInfo['name'] . "/" . $modInfo['admin_menu_url'];
-                        if (file_exists($modFile)) {
-                            require $modFile;
+                        $modName = (string) ($modInfo['name'] ?? '');
+                        $adminMenuUrl = (string) ($modInfo['admin_menu_url'] ?? '');
+                        $moduleBase = realpath(ROOT_DIR . "modules/" . $modName);
+                        $requested = ltrim(str_replace('\\', '/', $adminMenuUrl), '/');
+                        $requested = preg_replace('#/{2,}#', '/', $requested);
+                        $candidate = $moduleBase ? realpath($moduleBase . "/" . $requested) : false;
+                        $isPhp = (bool) preg_match('/\.php$/i', $requested);
+                        $safeModuleName = (bool) preg_match('/^[a-zA-Z0-9_-]+$/', $modName);
+
+                        if (
+                            $safeModuleName &&
+                            $moduleBase &&
+                            $candidate &&
+                            str_starts_with($candidate, $moduleBase . DIRECTORY_SEPARATOR) &&
+                            $isPhp &&
+                            is_file($candidate)
+                        ) {
+                            require $candidate;
                         } else {
-                            echo "<div class='alert alert-danger'>Modül dosyası bulunamadı: " . e($modFile) . "</div>";
+                            echo "<div class='alert alert-danger'>Modül dosyası erişimi engellendi.</div>";
                         }
                     }
                 } else {

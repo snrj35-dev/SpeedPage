@@ -38,6 +38,10 @@ $defaultModels = [
         ['id' => 'anthropic/claude-3.5-sonnet', 'name' => 'Claude 3.5 Sonnet', 'free' => false],
         ['id' => 'openai/gpt-4o', 'name' => 'GPT-4o', 'free' => false],
     ],
+    'openai' => [
+        ['id' => 'gpt-4o-mini', 'name' => 'GPT-4o Mini', 'free' => false],
+        ['id' => 'gpt-4o', 'name' => 'GPT-4o', 'free' => false],
+    ],
     'ollama' => [
         ['id' => 'llama3', 'name' => 'Llama 3', 'free' => true],
         ['id' => 'mistral', 'name' => 'Mistral', 'free' => true],
@@ -139,9 +143,15 @@ try {
             // 2. Merge Defaults if missing
             foreach ($defaultModels as $key => $models) {
                 if (!isset($providersMap[$key])) {
+                    $providerName = match ($key) {
+                        'gemini' => 'Google Gemini',
+                        'openrouter' => 'OpenRouter',
+                        'openai' => 'OpenAI',
+                        default => ucfirst($key)
+                    };
                     $providersMap[$key] = [
                         'provider_key' => $key,
-                        'provider_name' => ($key === 'gemini' ? 'Google Gemini' : ($key === 'openrouter' ? 'OpenRouter' : ucfirst($key))),
+                        'provider_name' => $providerName,
                         'api_key' => '',
                         'is_enabled' => ($key === 'gemini' ? 1 : 0),
                         'models' => $models
@@ -180,9 +190,26 @@ try {
         case 'chat':
             $prompt = $jsonInput['prompt'] ?? '';
             $providerKey = $jsonInput['provider'] ?? 'gemini';
-            $model = $jsonInput['model'] ?? 'gemini-1.5-flash';
+            $model = trim((string)($jsonInput['model'] ?? ''));
             $files = $jsonInput['files'] ?? [];
             $stream = (bool)($jsonInput['stream'] ?? false);
+
+            // Model fallback: if frontend sends empty model, use provider's first configured model.
+            if ($model === '') {
+                $providerConfig = $ai->getProvider($providerKey);
+                $providerModels = [];
+                if ($providerConfig && !empty($providerConfig['models'])) {
+                    $providerModels = json_decode((string)$providerConfig['models'], true) ?: [];
+                }
+                if (empty($providerModels) && isset($defaultModels[$providerKey])) {
+                    $providerModels = $defaultModels[$providerKey];
+                }
+                if (!empty($providerModels[0]['id'])) {
+                    $model = (string)$providerModels[0]['id'];
+                } else {
+                    $model = 'gemini-2.5-flash';
+                }
+            }
 
             // Context Building
             $sysSnapshot = get_system_snapshot($db);
@@ -255,7 +282,7 @@ try {
                 if (ob_get_level()) ob_end_clean();
                 
                 $fullResponse = "";
-                $ai->chat($providerKey, $model, $prompt, $systemPrompt, $fileCtx, function($chunk) use (&$fullResponse) {
+                $chatReturn = $ai->chat($providerKey, $model, $prompt, $systemPrompt, $fileCtx, function($chunk) use (&$fullResponse) {
                     // Extract content from OpenAI/OpenRouter stream format (data: ...)
                     if (strpos($chunk, 'data: ') !== false) {
                         $lines = explode("\n", $chunk);
@@ -282,6 +309,13 @@ try {
                         }
                     }
                 });
+
+                // Fallback for providers/endpoints that return non-SSE content on stream requests.
+                if ($fullResponse === '' && is_string($chatReturn) && $chatReturn !== '') {
+                    $fullResponse = $chatReturn;
+                    echo "data: " . json_encode(['content' => $chatReturn]) . "\n\n";
+                    flush();
+                }
 
                 // Finalize Log
                 if (isset($_SESSION['user_id'])) {
@@ -327,6 +361,19 @@ try {
     }
 
 } catch (Throwable $e) {
+    if (isset($db) && $db instanceof PDO) {
+        try {
+            $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+            $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+            $uid = isset($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : null;
+            $msg = 'AI Sistem Error [' . ($action ?? 'unknown') . ']: ' . $e->getMessage();
+            $db->prepare("INSERT INTO logs (user_id, action_type, message, ip_address, user_agent) VALUES (?, ?, ?, ?, ?)")
+               ->execute([$uid, 'system_error', $msg, $ip, $ua]);
+        } catch (Throwable $ignore) {
+            // no-op
+        }
+    }
+
     if (ob_get_length())
         ob_clean();
     echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
@@ -355,22 +402,19 @@ function handleApplyPatch(PDO $db, array $jsonInput): void
         throw new Exception(function_exists('__') ? __('file_not_found') : 'File not found');
     }
 
-    // Backup
-    $backupDir = STORAGE_DIR . 'ai_backups/';
-    if (!is_dir($backupDir))
-        mkdir($backupDir, 0755, true);
-    $backupFile = $backupDir . basename($filePath) . '.bak_' . date('Y-m-d_H-i-s');
-    copy($fullPath, $backupFile);
-
     // Patch Logic
     $currentContent = file_get_contents($fullPath);
     if ($oldCode) {
         $normCurrent = str_replace("\r\n", "\n", $currentContent);
         $normOld = str_replace("\r\n", "\n", $oldCode);
+        $normNew = str_replace("\r\n", "\n", $newCode);
 
         // Normalize spacing for better fuzzy match
-        $trimCurrent = preg_replace('/\s+/', ' ', $normCurrent);
         $trimOld = preg_replace('/\s+/', ' ', $normOld);
+        $trimNew = preg_replace('/\s+/', ' ', $normNew);
+        if (trim((string)$trimOld) === trim((string)$trimNew)) {
+            throw new Exception('No-op patch: old and new code are identical.');
+        }
 
         if (strpos($normCurrent, $normOld) === false) {
             if (strpos($normCurrent, trim($normOld)) !== false) {
@@ -379,9 +423,13 @@ function handleApplyPatch(PDO $db, array $jsonInput): void
                 throw new Exception('Patch Failed: Old code block not found exactly. Try manual edit.');
             }
         }
-        $finalContent = str_replace($normOld, str_replace("\r\n", "\n", $newCode), $normCurrent);
+        $finalContent = str_replace($normOld, $normNew, $normCurrent);
     } else {
         throw new Exception('Safety Block: Old code context missing.');
+    }
+
+    if ($finalContent === $currentContent) {
+        throw new Exception('No-op patch: file content unchanged.');
     }
 
     // Syntax Check
@@ -389,7 +437,56 @@ function handleApplyPatch(PDO $db, array $jsonInput): void
         throw new Exception('Syntax Error: ' . $error);
     }
 
-    file_put_contents($fullPath, $finalContent);
+    // Backup
+    $backupDir = STORAGE_DIR . 'ai_backups/';
+    if (!is_dir($backupDir))
+        mkdir($backupDir, 0755, true);
+    $backupFile = $backupDir . basename($filePath) . '.bak_' . date('Y-m-d_H-i-s');
+    if (!@copy($fullPath, $backupFile)) {
+        throw new Exception('Backup write failed: cannot create backup file.');
+    }
+
+    $originalModeRaw = @fileperms($fullPath);
+    $originalMode = ($originalModeRaw !== false) ? ($originalModeRaw & 0777) : null;
+    $temporaryModeApplied = false;
+    $restorePermError = null;
+
+    try {
+        if (!is_writable($fullPath)) {
+            if ($originalMode === null) {
+                throw new Exception('Patch write failed: cannot read current file permissions.');
+            }
+
+            // Temporary elevation: keep existing bits, only add owner/group write.
+            $temporaryMode = $originalMode | 0200 | 0020;
+            if (!@chmod($fullPath, $temporaryMode)) {
+                throw new Exception('Patch write failed: target file is not writable and temporary chmod failed.');
+            }
+
+            clearstatcache(true, $fullPath);
+            if (!is_writable($fullPath)) {
+                throw new Exception('Patch write failed: target file still not writable after temporary chmod.');
+            }
+            $temporaryModeApplied = true;
+        }
+
+        $writeRes = @file_put_contents($fullPath, $finalContent, LOCK_EX);
+        if ($writeRes === false) {
+            throw new Exception('Patch write failed: file_put_contents returned false.');
+        }
+    } finally {
+        if ($temporaryModeApplied && $originalMode !== null) {
+            if (!@chmod($fullPath, $originalMode)) {
+                $restorePermError = 'Patch applied but failed to restore original file permissions.';
+            } else {
+                clearstatcache(true, $fullPath);
+            }
+        }
+    }
+
+    if ($restorePermError !== null) {
+        throw new Exception($restorePermError);
+    }
 
     echo json_encode(['status' => 'success', 'message' => 'Patch applied', 'backup_path' => $backupFile]);
     cleanup_backups($backupDir);

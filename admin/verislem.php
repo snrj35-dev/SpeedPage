@@ -24,6 +24,10 @@ $response = [
 ];
 
 try {
+    if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+        throw new Exception("ACCESS_DENIED");
+    }
+
     // 1. Input Processing
     $rawInput = file_get_contents("php://input");
     $jsonData = json_decode($rawInput, true);

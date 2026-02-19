@@ -8,7 +8,7 @@ const MenuEdit = {
     add() {
         const params = new URLSearchParams();
 
-        params.append("action", "add");
+        params.append("menu_action", "add");
         params.append("title", m_title.value.trim());
         params.append("icon", m_icon.value.trim());
         params.append("page_id", m_page.value || "");
@@ -20,19 +20,19 @@ const MenuEdit = {
         Array.from(document.getElementById('m_locations').selectedOptions)
             .forEach(o => params.append("locations[]", o.value));
 
-        fetch("menu-panel.php", {
+        fetch("page-actions.php", {
             method: "POST",
             body: params
-        }).then(() => location.reload());
+        }).then(r => r.json()).then(res => { if (res.ok) location.reload(); });
     },
 
     del(id) {
         if (!confirm(window.lang?.confirm_delete_generic || 'Delete?')) return;
 
-        fetch("menu-panel.php", {
+        fetch("page-actions.php", {
             method: "POST",
-            body: new URLSearchParams({ action: "delete", id, csrf: CSRF_TOKEN })
-        }).then(() => location.reload());
+            body: new URLSearchParams({ menu_action: "delete", id, csrf: CSRF_TOKEN })
+        }).then(r => r.json()).then(res => { if (res.ok) location.reload(); });
     },
 
     edit(btn) {
@@ -70,7 +70,7 @@ const MenuEdit = {
         const id = row.dataset.id;
 
         const params = new URLSearchParams();
-        params.append("action", "update");
+        params.append("menu_action", "update");
         params.append("id", id);
         params.append("csrf", CSRF_TOKEN);
 
@@ -87,7 +87,7 @@ const MenuEdit = {
                 .forEach(o => params.append("locations[]", o.value));
         }
 
-        fetch("menu-panel.php", {
+        fetch("page-actions.php", {
             method: "POST",
             body: params
         })

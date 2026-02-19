@@ -55,6 +55,24 @@ function uploadImage(string $fileField): ?string
     return null;
 }
 
+function hasPhpTag(string $content): bool
+{
+    return (bool) preg_match('/<\\?(php|=)?/i', $content);
+}
+
+function isPagePhpAllowed(PDO $db): bool
+{
+    try {
+        $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $keyColumn = ($driver === 'mysql') ? '`key`' : 'key';
+        $stmt = $db->prepare("SELECT value FROM settings WHERE {$keyColumn} = ? LIMIT 1");
+        $stmt->execute(['allow_page_php']);
+        return ((string) $stmt->fetchColumn() === '1');
+    } catch (Throwable) {
+        return false;
+    }
+}
+
 // 1. SİLME İŞLEMİ (Sayfa + Asset + Menü)
 $action = filter_input(INPUT_GET, 'action');
 if ($action === 'delete') {
@@ -412,6 +430,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Content can be HTML/PHP, so we take it raw but be careful
     $content = $_POST['content'] ?? $_POST['icerik'] ?? '';
+    $allowPagePhp = isPagePhpAllowed($db);
+    if (!$allowPagePhp && hasPhpTag((string) $content)) {
+        $errorMsg = "PHP içerik kaydı devre dışı. Ayarlar > Güvenlik sekmesinden allow_page_php açılmadan PHP kodu kaydedilemez.";
+        if ($mode === 'create') {
+            die("❌ Hata: " . $errorMsg);
+        }
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+        exit;
+    }
 
     $title = trim(filter_input(INPUT_POST, 'title') ?? '') ?: $slug;
     $description = trim(filter_input(INPUT_POST, 'description') ?? '') ?: null;

@@ -5,6 +5,13 @@ require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/../settings.php';
 require_once __DIR__ . '/db.php'; // Loglama için DB bağlantısı gerekebilir
 
+if (empty($is_admin) || !$is_admin) {
+    http_response_code(403);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['ok' => false, 'error' => 'Access denied']);
+    exit;
+}
+
 // Güvenlik: Page parametresi kontrolü
 $pageParam = filter_input(INPUT_GET, 'page', FILTER_SANITIZE_SPECIAL_CHARS);
 if ($pageParam !== 'browser') {
@@ -45,6 +52,80 @@ function safePath(string $root, string $path): string|false
     }
 
     return $full;
+}
+
+function isUnsafeZipEntry(string $name): bool
+{
+    $name = str_replace('\\', '/', $name);
+    if ($name === '' || str_starts_with($name, '/')) {
+        return true;
+    }
+    if (preg_match('/^[A-Za-z]:\//', $name)) {
+        return true;
+    }
+    if (strpos($name, "\0") !== false) {
+        return true;
+    }
+    foreach (explode('/', $name) as $part) {
+        if ($part === '..') {
+            return true;
+        }
+    }
+    return false;
+}
+
+function extractZipSafely(ZipArchive $zip, string $destination): void
+{
+    $base = realpath($destination);
+    if ($base === false) {
+        throw new RuntimeException('Invalid extraction base');
+    }
+
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $entry = $zip->getNameIndex($i);
+        if ($entry === false) {
+            continue;
+        }
+        $entry = str_replace('\\', '/', $entry);
+        $entry = ltrim($entry, '/');
+
+        if (isUnsafeZipEntry($entry)) {
+            throw new RuntimeException('Unsafe ZIP entry');
+        }
+        if ($entry === '') {
+            continue;
+        }
+
+        $target = $base . '/' . $entry;
+        if (str_ends_with($entry, '/')) {
+            if (!is_dir($target) && !mkdir($target, 0755, true)) {
+                throw new RuntimeException('Directory create failed');
+            }
+            continue;
+        }
+
+        $dir = dirname($target);
+        if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+            throw new RuntimeException('Directory create failed');
+        }
+        $dirReal = realpath($dir);
+        if ($dirReal === false || !str_starts_with($dirReal, $base)) {
+            throw new RuntimeException('Unsafe extraction target');
+        }
+
+        $in = $zip->getStream($zip->getNameIndex($i));
+        if (!$in) {
+            throw new RuntimeException('ZIP stream read failed');
+        }
+        $out = fopen($target, 'wb');
+        if (!$out) {
+            fclose($in);
+            throw new RuntimeException('Target write failed');
+        }
+        stream_copy_to_stream($in, $out);
+        fclose($in);
+        fclose($out);
+    }
 }
 
 // ================== ZIP İŞLEMLERİ ==================
@@ -100,13 +181,17 @@ if (isset($_GET['unzip'])) {
     if ($p && strtolower(pathinfo($p, PATHINFO_EXTENSION)) === 'zip') {
         $zip = new ZipArchive;
         if ($zip->open($p) === TRUE) {
-            $zip->extractTo(dirname($p));
-            $zip->close();
-
-            if (function_exists('sp_log')) {
-                sp_log("ZIP çıkartıldı: " . basename($p), "browser_unzip_ok");
+            try {
+                extractZipSafely($zip, dirname($p));
+                if (function_exists('sp_log')) {
+                    sp_log("ZIP çıkartıldı: " . basename($p), "browser_unzip_ok");
+                }
+                echo json_encode(['ok' => true]);
+            } catch (Throwable $e) {
+                echo json_encode(['ok' => false, 'error' => 'Unsafe or invalid ZIP']);
+            } finally {
+                $zip->close();
             }
-            echo json_encode(['ok' => true]);
         } else {
             echo json_encode(['ok' => false, 'error' => 'Could not open ZIP']);
         }

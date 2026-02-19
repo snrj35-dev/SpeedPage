@@ -17,7 +17,31 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     exit;
 }
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    echo json_encode(["status" => "error", "message" => "Invalid method"]);
+    exit;
+}
+
+$csrf = $_POST['csrf'] ?? '';
+if (!is_string($csrf) || !hash_equals($_SESSION['csrf'] ?? '', $csrf)) {
+    echo json_encode(["status" => "error", "message" => __('csrf_error')]);
+    exit;
+}
+
 $action = filter_input(INPUT_POST, 'action', FILTER_SANITIZE_SPECIAL_CHARS) ?? '';
+/** @var PDO $db */
+global $db;
+
+function verifyAdminPassword(PDO $db, int $userId, string $password): bool
+{
+    if ($userId <= 0 || $password === '') {
+        return false;
+    }
+    $stmt = $db->prepare("SELECT password_hash FROM users WHERE id = ? LIMIT 1");
+    $stmt->execute([$userId]);
+    $hash = (string) $stmt->fetchColumn();
+    return ($hash !== '') && password_verify($password, $hash);
+}
 
 function getSourceDB(): DB_Switch
 {
@@ -41,6 +65,22 @@ try {
         $user = $_POST['user'] ?? 'root';
         $pass = $_POST['pass'] ?? '';
         $port = (int) ($_POST['port'] ?? 3306);
+
+        if (!in_array($type, ['mysql'], true)) {
+            throw new Exception("Invalid database type.");
+        }
+        if (!preg_match('/^[a-zA-Z0-9._-]+$/', (string) $host)) {
+            throw new Exception("Invalid host format.");
+        }
+        if (!preg_match('/^[a-zA-Z0-9._-]{1,64}$/', (string) $user)) {
+            throw new Exception("Invalid username format.");
+        }
+        if (!preg_match('/^[a-zA-Z0-9_-]{1,64}$/', (string) $name)) {
+            throw new Exception("Invalid database name format.");
+        }
+        if ($port < 1 || $port > 65535) {
+            throw new Exception("Invalid port.");
+        }
 
         $config = [
             'host' => $host,
@@ -149,6 +189,9 @@ try {
 
         if (!$table)
             throw new Exception("Table name missing.");
+        if (!preg_match('/^[a-zA-Z0-9_]+$/', $table)) {
+            throw new Exception("Invalid table name.");
+        }
 
         $source = getSourceDB();
         $target = getTargetDB();
@@ -208,6 +251,11 @@ try {
     /* ---------------- STEP 4: FINALIZE ---------------- */ elseif ($action === 'finalize') {
         if (!isset($_SESSION['migration_target']))
             throw new Exception("Configuration missing.");
+        $currentPassword = (string) ($_POST['current_password'] ?? '');
+        $currentUserId = (int) ($_SESSION['user_id'] ?? 0);
+        if (!verifyAdminPassword($db, $currentUserId, $currentPassword)) {
+            throw new Exception("Admin password verification failed.");
+        }
 
         $conf = $_SESSION['migration_target'];
 
@@ -223,15 +271,16 @@ try {
         $newContent .= "// Generator: Migration Wizard\n";
 
         if ($conf['type'] === 'mysql') {
-            $host = $conf['config']['host'];
-            $name = $conf['config']['name'];
-            $user = $conf['config']['user'];
-            $pass = $conf['config']['pass'];
-            $port = $conf['config']['port'];
+            $host = (string) ($conf['config']['host'] ?? 'localhost');
+            $name = (string) ($conf['config']['name'] ?? '');
+            $user = (string) ($conf['config']['user'] ?? '');
+            $pass = (string) ($conf['config']['pass'] ?? '');
+            $port = (int) ($conf['config']['port'] ?? 3306);
 
-            $newContent .= "\$dsn = \"mysql:host=$host;port=$port;dbname=$name;charset=utf8mb4\";\n";
-            $newContent .= "\$user = \"$user\";\n";
-            $newContent .= "\$pass = \"$pass\";\n";
+            $dsn = "mysql:host={$host};port={$port};dbname={$name};charset=utf8mb4";
+            $newContent .= "\$dsn = " . var_export($dsn, true) . ";\n";
+            $newContent .= "\$user = " . var_export($user, true) . ";\n";
+            $newContent .= "\$pass = " . var_export($pass, true) . ";\n";
             $newContent .= "\n";
             $newContent .= "try {\n";
             $newContent .= "    \$db = new PDO(\$dsn, \$user, \$pass);\n";
@@ -251,6 +300,12 @@ try {
     }
 
     /* ---------------- STEP: ROLLBACK (EMERGENCY) ---------------- */ elseif ($action === 'rollback') {
+        $currentPassword = (string) ($_POST['current_password'] ?? '');
+        $currentUserId = (int) ($_SESSION['user_id'] ?? 0);
+        if (!verifyAdminPassword($db, $currentUserId, $currentPassword)) {
+            throw new Exception("Admin password verification failed.");
+        }
+
         $dbFile = __DIR__ . '/db.php';
         $bakFile = $dbFile . '.bak';
 

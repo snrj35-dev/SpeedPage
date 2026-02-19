@@ -203,25 +203,48 @@ class AiCore
     public function callOpenAI(string $apiKey, string $model, string $userPrompt, string $systemInfo, ?callable $onChunk = null): string
     {
         $url = "https://api.openai.com/v1/chat/completions";
+        $effectiveOnChunk = $onChunk;
 
         $data = [
             "model" => $model,
-            "stream" => $onChunk ? true : false,
+            "stream" => ($effectiveOnChunk !== null),
             "messages" => [
                 ["role" => "system", "content" => $systemInfo],
                 ["role" => "user", "content" => $userPrompt]
             ]
         ];
 
-        $response = $this->curlRequest($url, $data, 'openai', $apiKey, $onChunk);
-        if ($onChunk) return '';
+        $response = $this->curlRequest($url, $data, 'openai', $apiKey, $effectiveOnChunk);
+        if ($effectiveOnChunk !== null) return '';
 
         $json = json_decode($response, true);
-        if (isset($json['error'])) {
+        if (is_array($json) && isset($json['error'])) {
             throw new Exception("OpenAI Error: " . ($json['error']['message'] ?? 'Unknown'));
         }
 
-        return $json['choices'][0]['message']['content'] ?? throw new Exception("OpenAI empty response");
+        $content = '';
+        if (is_array($json)) {
+            $content = (string) (
+                $json['choices'][0]['message']['content']
+                ?? $json['choices'][0]['delta']['content']
+                ?? $json['choices'][0]['text']
+                ?? $json['message']['content']
+                ?? $json['output_text']
+                ?? ''
+            );
+        }
+
+        if ($content !== '') {
+            return $content;
+        }
+
+        // Some local proxies may return plain text or non-standard JSON.
+        $raw = trim($response);
+        if ($raw !== '') {
+            return $raw;
+        }
+
+        throw new Exception("OpenAI empty response");
     }
 
     private function curlRequest(string $url, array $data, string $type, string $apiKey, ?callable $onChunk = null, array $customHeaders = []): string
@@ -269,7 +292,12 @@ class AiCore
             throw new Exception("CURL Error: $err");
         }
 
-        return $response ?: '';
+        if (is_string($response)) {
+            return $response;
+        }
+
+        // In streamed mode curl_exec commonly returns true; no full body is available.
+        return '';
     }
 
     /**

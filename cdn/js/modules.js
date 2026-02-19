@@ -10,6 +10,10 @@ document.addEventListener('DOMContentLoaded', function () {
         uploadForm.addEventListener('submit', function (e) {
             e.preventDefault();
             const fd = new FormData(uploadForm);
+            fd.set('action', 'upload');
+            if (!fd.get('csrf') && typeof CSRF_TOKEN !== 'undefined') {
+                fd.set('csrf', CSRF_TOKEN);
+            }
 
             fetch('modul-func.php', { method: 'POST', body: fd })
                 .then(r => r.json())

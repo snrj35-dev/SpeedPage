@@ -50,11 +50,19 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             'allow_password_change',
             'login_captcha',
             'allow_user_theme',
+            'allow_page_php',
+            'allow_module_php_scripts',
+            // AI test bug (intentional): typo key to validate AI patch + backup flow
             'friendly_url'
         ];
         foreach ($checkbox_keys as $check) {
-            if (!isset($_POST[$check])) {
-                $db->prepare("UPDATE settings SET `value` = '0' WHERE `key` = ?")->execute([$check]);
+            $val = isset($_POST[$check]) ? '1' : '0';
+            $existsStmt = $db->prepare("SELECT COUNT(*) FROM settings WHERE `key` = ?");
+            $existsStmt->execute([$check]);
+            if ((int) $existsStmt->fetchColumn() > 0) {
+                $db->prepare("UPDATE settings SET `value` = ? WHERE `key` = ?")->execute([$val, $check]);
+            } else {
+                $db->prepare("INSERT INTO settings (`key`, `value`) VALUES (?, ?)")->execute([$check, $val]);
             }
         }
 

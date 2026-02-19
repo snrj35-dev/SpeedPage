@@ -16,6 +16,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo json_encode(["status" => "error", "message" => __('csrf_error'), "message_key" => "csrf_error"]);
         exit;
     }
+    if (empty($is_admin) || !$is_admin) {
+        echo json_encode(["status" => "error", "message" => __('access_denied'), "message_key" => "access_denied"]);
+        exit;
+    }
 } elseif (realpath($_SERVER['SCRIPT_FILENAME']) === realpath(__FILE__)) {
     // Only block direct GET access, not inclusion
     exit;
@@ -43,6 +47,132 @@ exit;
 /* ======================================================
    FUNCTIONS
    ====================================================== */
+
+function isUnsafeZipEntry(string $name): bool
+{
+    $name = str_replace('\\', '/', $name);
+    if ($name === '' || str_starts_with($name, '/')) {
+        return true;
+    }
+    if (preg_match('/^[A-Za-z]:\//', $name)) {
+        return true;
+    }
+    if (strpos($name, "\0") !== false) {
+        return true;
+    }
+    foreach (explode('/', $name) as $part) {
+        if ($part === '..') {
+            return true;
+        }
+    }
+    return false;
+}
+
+function extractZipSafely(ZipArchive $zip, string $destination): void
+{
+    $base = realpath($destination);
+    if ($base === false) {
+        throw new RuntimeException('Invalid extraction base');
+    }
+
+    for ($i = 0; $i < $zip->numFiles; $i++) {
+        $entry = $zip->getNameIndex($i);
+        if ($entry === false) {
+            continue;
+        }
+        $entry = str_replace('\\', '/', $entry);
+        $entry = ltrim($entry, '/');
+        if (isUnsafeZipEntry($entry)) {
+            throw new RuntimeException('Unsafe ZIP entry');
+        }
+        if ($entry === '') {
+            continue;
+        }
+
+        $target = $base . '/' . $entry;
+        if (str_ends_with($entry, '/')) {
+            if (!is_dir($target) && !mkdir($target, 0755, true)) {
+                throw new RuntimeException('Directory create failed');
+            }
+            continue;
+        }
+
+        $dir = dirname($target);
+        if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+            throw new RuntimeException('Directory create failed');
+        }
+        $dirReal = realpath($dir);
+        if ($dirReal === false || !str_starts_with($dirReal, $base)) {
+            throw new RuntimeException('Unsafe extraction target');
+        }
+
+        $in = $zip->getStream($zip->getNameIndex($i));
+        if (!$in) {
+            throw new RuntimeException('ZIP stream read failed');
+        }
+        $out = fopen($target, 'wb');
+        if (!$out) {
+            fclose($in);
+            throw new RuntimeException('Target write failed');
+        }
+        stream_copy_to_stream($in, $out);
+        fclose($in);
+        fclose($out);
+    }
+}
+
+function isModulePhpScriptExecutionAllowed(PDO $db): bool
+{
+    try {
+        $driver = $db->getAttribute(PDO::ATTR_DRIVER_NAME);
+        $keyColumn = ($driver === 'mysql') ? '`key`' : 'key';
+        $stmt = $db->prepare("SELECT value FROM settings WHERE {$keyColumn} = ? LIMIT 1");
+        $stmt->execute(['allow_module_php_scripts']);
+        return ((string) $stmt->fetchColumn() === '1');
+    } catch (Throwable) {
+        return false;
+    }
+}
+
+function ensureWritableDirectory(string $dir, string $label): void
+{
+    if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+        throw new RuntimeException($label . " oluşturulamadı: " . $dir);
+    }
+    if (!is_writable($dir)) {
+        throw new RuntimeException($label . " yazılabilir değil: " . $dir);
+    }
+}
+
+function moduleNeedsPhpLifecycleScripts(array $config, string $modulePath): bool
+{
+    $dbSetup = $config['db_setup'] ?? [];
+    $installScript = $dbSetup['install'] ?? null;
+    $uninstallScript = $dbSetup['uninstall'] ?? null;
+    $scriptCandidates = [];
+    if (is_string($installScript) && $installScript !== '') {
+        $scriptCandidates[] = $installScript;
+    }
+    if (is_string($uninstallScript) && $uninstallScript !== '') {
+        $scriptCandidates[] = $uninstallScript;
+    }
+
+    foreach ($scriptCandidates as $script) {
+        if (preg_match('/\.php$/i', $script)) {
+            return true;
+        }
+        $fullPath = rtrim($modulePath, '/\\') . '/' . ltrim($script, '/\\');
+        if (is_file($fullPath) && preg_match('/\.php$/i', $fullPath)) {
+            return true;
+        }
+    }
+
+    if (is_file($modulePath . '/migration.php') || is_file($modulePath . '/install.php')) {
+        return true;
+    }
+
+    return (bool) glob($modulePath . '/uninstall_*.php');
+}
 
 function handleUpload(PDO $db): void
 {
@@ -79,7 +209,7 @@ function handleUpload(PDO $db): void
                 'index.php', 'settings.php', 'db.php', 'auth.php', '.htaccess', 
                 'manifest.json', 'config.php', 'db_switch.php', 'AiCore.php'
             ];
-            if (strpos($name, '..') !== false || strpos($name, '/') === 0 || strpos($name, '\\') === 0) {
+            if (isUnsafeZipEntry($name)) {
                 throw new Exception("Security Error: Path Traversal");
             }
             // Prevent core file overwrite in root of ZIP (which would be extracted to modules/tmp_...)
@@ -128,12 +258,13 @@ function handleUpload(PDO $db): void
         }
 
         // Extract
-        $extractPath = ROOT_DIR . "modules/tmp_" . bin2hex(random_bytes(8));
+        ensureWritableDirectory(TEMP_DIR, 'Temp klasörü');
+        $extractPath = TEMP_DIR . "module_upload_" . bin2hex(random_bytes(8));
         if (!mkdir($extractPath, 0755, true)) {
             $zip->close();
             throw new Exception("Failed to create temp dir", 500);
         }
-        $zip->extractTo($extractPath);
+        extractZipSafely($zip, $extractPath);
         $zip->close();
 
         $slug = preg_replace('/[^a-zA-Z0-9_\-]/', '', $config['name'] ?? '');
@@ -149,8 +280,9 @@ function handleUpload(PDO $db): void
                     $cleanPath = preg_replace('/^images[\/\\\\]/i', '', $imgRel);
                     $dst = $targetBase . $cleanPath;
                     $dstDir = dirname($dst);
-                    if (!is_dir($dstDir))
-                        mkdir($dstDir, 0755, true);
+                    if (!is_dir($dstDir) && !mkdir($dstDir, 0755, true)) {
+                        throw new Exception("Assets target directory cannot be created: $dstDir", 500);
+                    }
                     copy($src, $dst);
                 }
             }
@@ -158,6 +290,7 @@ function handleUpload(PDO $db): void
 
         // Create Target Directory (Modules)
         $targetDir = ROOT_DIR . "modules/" . $slug;
+        ensureWritableDirectory(ROOT_DIR . "modules/", 'Modules klasörü');
         if (is_dir($targetDir)) {
             recursiveDelete($targetDir);
         }
@@ -204,9 +337,13 @@ function installModule(PDO $db, string $slug, array $config, string $extractPath
     // db_setup handling
     $dbSetup = $config['db_setup'] ?? [];
     $installScript = $dbSetup['install'] ?? null;
-    $uninstallScript = $dbSetup['uninstall'] ?? null;
+    $allowModulePhpScripts = isModulePhpScriptExecutionAllowed($db);
 
-    if ($installScript && file_exists($extractPath . '/' . $installScript)) {
+    if (!$allowModulePhpScripts && moduleNeedsPhpLifecycleScripts($config, $extractPath)) {
+        throw new RuntimeException("Bu modül PHP install/migration/uninstall script gerektiriyor. Ayarlar > Güvenlik bölümünden 'Modül install/migration/uninstall PHP script çalıştırmaya izin ver' seçeneğini açın.");
+    }
+
+    if ($allowModulePhpScripts && $installScript && file_exists($extractPath . '/' . $installScript)) {
         try {
             include_once $extractPath . '/' . $installScript;
         } catch (Throwable $e) {
@@ -220,7 +357,7 @@ function installModule(PDO $db, string $slug, array $config, string $extractPath
     }
 
     // Migration PHP
-    if (file_exists($extractPath . '/migration.php')) {
+    if ($allowModulePhpScripts && file_exists($extractPath . '/migration.php')) {
         include $extractPath . '/migration.php';
     }
 
@@ -392,14 +529,29 @@ function handleDeleteModule(PDO $db): void
     }
 
     $slug = $module['page_slug'];
+    $allowModulePhpScripts = isModulePhpScriptExecutionAllowed($db);
 
     // 1. Run Uninstall Script if exists
     $moduleDir = ROOT_DIR . "modules/" . $slug;
-    
-    // Read module.json to find uninstall script
     $moduleJsonFile = $moduleDir . "/module.json";
+    $moduleConfig = [];
     if (file_exists($moduleJsonFile)) {
-        $moduleConfig = json_decode(file_get_contents($moduleJsonFile), true);
+        $decoded = json_decode((string) file_get_contents($moduleJsonFile), true);
+        if (is_array($decoded)) {
+            $moduleConfig = $decoded;
+        }
+    }
+
+    if (!$allowModulePhpScripts && moduleNeedsPhpLifecycleScripts($moduleConfig, $moduleDir)) {
+        echo json_encode([
+            "status" => "error",
+            "message" => "Bu modül uninstall sırasında PHP script gerektiriyor. Ayarlar > Güvenlik bölümünden ilgili seçeneği açın."
+        ]);
+        return;
+    }
+
+    // Read module.json to find uninstall script
+    if ($allowModulePhpScripts && file_exists($moduleJsonFile)) {
         $uninstallScript = $moduleConfig['db_setup']['uninstall'] ?? null;
         if ($uninstallScript && file_exists($moduleDir . "/" . $uninstallScript)) {
             try {
@@ -411,15 +563,17 @@ function handleDeleteModule(PDO $db): void
     }
 
     $uninstallFiles = ["uninstall.php", "uninstall_" . $slug . ".php"];
-    foreach ($uninstallFiles as $u) {
-        $uFile = $moduleDir . "/" . $u;
-        if (file_exists($uFile)) {
-            try {
-                include $uFile;
-            } catch (Throwable $e) {
-                // Ignore or log uninstall error
+    if ($allowModulePhpScripts) {
+        foreach ($uninstallFiles as $u) {
+            $uFile = $moduleDir . "/" . $u;
+            if (file_exists($uFile)) {
+                try {
+                    include $uFile;
+                } catch (Throwable $e) {
+                    // Ignore or log uninstall error
+                }
+                break;
             }
-            break;
         }
     }
 
@@ -565,10 +719,8 @@ function handleRemoteInstall(PDO $db): void
         }
 
         // 1. Download ZIP via cURL
-        $tmpFile = ROOT_DIR . '_temp/remote_' . bin2hex(random_bytes(8)) . '.zip';
-        if (!is_dir(ROOT_DIR . '_temp/')) {
-            mkdir(ROOT_DIR . '_temp/', 0755, true);
-        }
+        ensureWritableDirectory(TEMP_DIR, 'Temp klasörü');
+        $tmpFile = TEMP_DIR . 'remote_' . bin2hex(random_bytes(8)) . '.zip';
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -583,12 +735,14 @@ function handleRemoteInstall(PDO $db): void
             throw new Exception(__('download_error') . " (HTTP $httpCode)", 400);
         }
 
-        file_put_contents($tmpFile, $data);
+        if (file_put_contents($tmpFile, $data) === false) {
+            throw new Exception("Remote ZIP dosyası temp dizinine yazılamadı: " . $tmpFile, 500);
+        }
 
         // 2. Extract and Validate
         $zip = new ZipArchive();
         if ($zip->open($tmpFile) !== true) {
-            unlink($tmpFile);
+            @unlink($tmpFile);
             throw new Exception(__('zip_error'), 400);
         }
 
@@ -602,34 +756,37 @@ function handleRemoteInstall(PDO $db): void
                 $configContent = $zip->getFromIndex($i);
             }
             // Basic Path Traversal Check
-            if (strpos($zipName, '..') !== false) {
+            if (isUnsafeZipEntry($zipName)) {
                 throw new Exception("Security Error: Path Traversal detected in ZIP");
             }
         }
 
         if (!$configContent) {
             $zip->close();
-            unlink($tmpFile);
+            @unlink($tmpFile);
             throw new Exception("Configuration file ($jsonFile) not found in package.", 400);
         }
 
         $config = json_decode($configContent, true);
         if (!$config) {
             $zip->close();
-            unlink($tmpFile);
+            @unlink($tmpFile);
             throw new Exception("Invalid JSON in $jsonFile", 400);
         }
 
         // 3. Prepare Target Directories
-        $extractPath = ROOT_DIR . "_temp/ext_" . bin2hex(random_bytes(8));
-        mkdir($extractPath, 0755, true);
-        $zip->extractTo($extractPath);
+        $extractPath = TEMP_DIR . "ext_" . bin2hex(random_bytes(8));
+        if (!mkdir($extractPath, 0755, true)) {
+            throw new Exception("Extract temp klasörü oluşturulamadı: " . $extractPath, 500);
+        }
+        extractZipSafely($zip, $extractPath);
         $zip->close();
-        unlink($tmpFile);
+        @unlink($tmpFile);
 
         $slug = preg_replace('/[^a-zA-Z0-9_\-]/', '', $config['name'] ?? $name);
         $targetDir = ROOT_DIR . "modules/" . $slug;
 
+        ensureWritableDirectory(ROOT_DIR . "modules/", 'Modules klasörü');
         if (is_dir($targetDir)) {
             recursiveDelete($targetDir);
         }
