@@ -42,7 +42,10 @@ $txt = [
         'reinstall_confirm' => 'Mevcut ayarların üzerine yazılmasını kabul ediyorum.',
         'test_connection' => 'Bağlantıyı Test Et',
         'test_success' => '✅ Bağlantı Başarılı!',
-        'test_fail' => '❌ Hata: '
+        'test_fail' => '❌ Hata: ',
+        'csrf_error' => 'Geçersiz istek (CSRF doğrulaması başarısız).',
+        'installer_locked' => 'Installer kilitli. Dosya projede kalabilir ancak kurulu sistemde varsayılan olarak kapalıdır.',
+        'installer_unlock_hint' => 'Geliştirme için sadece localde açmak üzere SPEEDPAGE_ALLOW_INSTALLER=1 veya admin/_internal_storage/data_secure/.dev_install_unlock kullanın.'
     ],
     'en' => [
         'title' => '🚀 SpeedPage Installer',
@@ -73,7 +76,10 @@ $txt = [
         'reinstall_confirm' => 'I accept overwriting existing settings.',
         'test_connection' => 'Test Connection',
         'test_success' => '✅ Connection Successful!',
-        'test_fail' => '❌ Error: '
+        'test_fail' => '❌ Error: ',
+        'csrf_error' => 'Invalid request (CSRF validation failed).',
+        'installer_locked' => 'Installer is locked. The file can remain in the project, but it is disabled by default on installed systems.',
+        'installer_unlock_hint' => 'For development, enable only on localhost with SPEEDPAGE_ALLOW_INSTALLER=1 or admin/_internal_storage/data_secure/.dev_install_unlock.'
     ]
 ];
 
@@ -82,6 +88,13 @@ $t = $txt[$langCode]; // Active language array
 $message = '';
 $error = '';
 $installed = false;
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+if (empty($_SESSION['install_csrf'])) {
+    $_SESSION['install_csrf'] = bin2hex(random_bytes(32));
+}
 
 // 1. Check Installation Status
 $settingsPath = __DIR__ . '/settings.php';
@@ -92,10 +105,25 @@ if (file_exists($settingsPath)) {
     }
 }
 
+$remoteIp = $_SERVER['REMOTE_ADDR'] ?? '';
+$isLocalRequest = in_array($remoteIp, ['127.0.0.1', '::1'], true);
+$devUnlockByEnv = getenv('SPEEDPAGE_ALLOW_INSTALLER') === '1';
+$devUnlockByFile = file_exists(__DIR__ . '/admin/_internal_storage/data_secure/.dev_install_unlock');
+$installerWritable = !$installed || ($isLocalRequest && ($devUnlockByEnv || $devUnlockByFile));
+
 // ---------------------------------------------------------
 // POST REQUEST HANDLER
 // ---------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!$installerWritable) {
+        http_response_code(403);
+        throw new Exception($t['installer_locked'] . " " . $t['installer_unlock_hint']);
+    }
+    $csrf = $_POST['csrf'] ?? '';
+    if (!is_string($csrf) || !hash_equals($_SESSION['install_csrf'], $csrf)) {
+        throw new Exception($t['csrf_error']);
+    }
+
     // Ajax Connection Test
     if (isset($_POST['action']) && $_POST['action'] === 'test_connection') {
         try {
@@ -117,6 +145,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$siteName || !$adminUser || !$adminPass) {
             throw new Exception($t['fill_all']);
+        }
+        if ($installed && (($_POST['confirm_reinstall'] ?? '') !== '1')) {
+            throw new Exception($t['reinstall_confirm']);
         }
 
         // MySQL Validations
@@ -387,6 +418,8 @@ CREATE TABLE IF NOT EXISTS user_meta (
             'logo_url' => '',
             'login_captcha' => '0',
             'allow_user_theme' => '0',
+            'allow_page_php' => '0',
+            'allow_module_php_scripts' => '0',
             'friendly_url' => '0',
             'site_protocol' => 'http',
             'meta_keywords' => '',
@@ -581,6 +614,7 @@ CREATE TABLE IF NOT EXISTS user_meta (
         }
 
         input[type="text"],
+        input[type="email"],
         input[type="password"],
         select {
             width: 100%;
@@ -711,7 +745,15 @@ CREATE TABLE IF NOT EXISTS user_meta (
                 </div>
             <?php endif; ?>
 
+            <?php if (!$installerWritable): ?>
+                <div class="alert alert-error">
+                    <strong><?= $t['installer_locked'] ?></strong><br>
+                    <?= $t['installer_unlock_hint'] ?>
+                </div>
+            <?php else: ?>
+
             <form method="post" id="installForm">
+                <input type="hidden" name="csrf" value="<?= htmlspecialchars($_SESSION['install_csrf']) ?>">
                 <div class="form-group">
                     <label><?= $t['db_type'] ?></label>
                     <div class="db-toggle">
@@ -776,6 +818,7 @@ CREATE TABLE IF NOT EXISTS user_meta (
                     <button type="submit"><?= $t['install_btn'] ?></button>
                 <?php endif; ?>
             </form>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 

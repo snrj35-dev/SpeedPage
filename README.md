@@ -1,4 +1,4 @@
-# 📘 SpeedPage CMS (v0.3 Alpha)
+# 📘 SpeedPage CMS (v0.4)
 
 SpeedPage — A modular, panel-oriented Content Management System (CMS) designed for high performance and flexibility. Now featuring a Universal Installation Wizard with support for both SQLite and MySQL.
 
@@ -18,7 +18,7 @@ SpeedPage, yüksek performans ve esneklik için tasarlanmış, modüler ve panel
 
 ---
 
-## 🚀 Key Updates (v0.3 Alpha)
+## 🚀 Key Updates (v0.4)
 ### 🛠️ Universal Installer
 - **Agnostic DB Support:** Switch between SQLite and MySQL with a single click.
 - **Smart Schema Deployment:** Automatically creates all tables with pre-configured default values.

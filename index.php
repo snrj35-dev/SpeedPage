@@ -2,8 +2,18 @@
 declare(strict_types=1);
 
 // index.php en üst kısım
-// 1. Veritabanı dosyası YOKSA ve kurulum dosyası VARSA kuruluma yönlendir
-if (!file_exists(__DIR__ . '/admin/_internal_storage/data_secure/data.db')) {
+// SQLite için DB dosyası yoksa kurulum gerekir. MySQL yapılandırması varsa kurulu kabul edilir.
+$sqliteDbPath = __DIR__ . '/admin/_internal_storage/data_secure/data.db';
+$settingsPath = __DIR__ . '/settings.php';
+$isMysqlConfigured = false;
+if (file_exists($settingsPath)) {
+    $settingsRaw = @file_get_contents($settingsPath);
+    if (is_string($settingsRaw) && preg_match("/define\('DB_TYPE',\s*'mysql'\);/i", $settingsRaw)) {
+        $isMysqlConfigured = true;
+    }
+}
+
+if (!$isMysqlConfigured && !file_exists($sqliteDbPath)) {
     if (file_exists(__DIR__ . '/install.php')) {
         header("Location: install.php");
         exit;

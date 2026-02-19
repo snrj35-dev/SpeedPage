@@ -133,6 +133,4 @@ $siteName = trim($settings['site_name'] ?? 'SpeedPage');
     </div>
 </div>
 <div id="mobile-sidebar-overlay" class="mobile-sidebar-overlay"></div>
-
-<div id="mobile-sidebar-overlay" class="mobile-sidebar-overlay"></div>
 <?php /* JS moved to cdn/js/navbar.js */ ?>

@@ -24,7 +24,7 @@ function sp_cache_set(string $key, mixed $data, int $ttl = 3600): void
         'expires' => time() + $ttl,
         'data' => $data
     ];
-    file_put_contents($file, serialize($cacheData));
+    file_put_contents($file, json_encode($cacheData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
 }
 
 function sp_cache_get(string $key): mixed
@@ -33,12 +33,17 @@ function sp_cache_get(string $key): mixed
     if (!file_exists($file))
         return null;
 
-    $cacheData = @unserialize(file_get_contents($file));
-    if (!$cacheData || time() > $cacheData['expires']) {
+    $raw = file_get_contents($file);
+    $cacheData = is_string($raw) ? json_decode($raw, true) : null;
+    if (
+        !is_array($cacheData) ||
+        !isset($cacheData['expires']) ||
+        time() > (int) $cacheData['expires']
+    ) {
         @unlink($file);
         return null;
     }
-    return $cacheData['data'];
+    return $cacheData['data'] ?? null;
 }
 
 function sp_cache_delete(string $key): void
@@ -63,6 +68,11 @@ function sp_cache_flush(): void
 // 2. Global Logger & Session Start
 // ---------------------------------------------
 if (session_status() === PHP_SESSION_NONE) {
+    $isHttps = (
+        (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+        || (strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https')
+    );
+
     // Session duration optimization via cache
     $s_duration = sp_cache_get('session_duration');
     if ($s_duration === null && file_exists(ROOT_DIR . 'admin/veritabanı/data.db')) {
@@ -77,11 +87,19 @@ if (session_status() === PHP_SESSION_NONE) {
         }
     }
 
+    $sessionCookieParams = [
+        'path' => '/',
+        'httponly' => true,
+        'samesite' => 'Lax',
+        'secure' => $isHttps
+    ];
+
     if ($s_duration) {
         $duration = (int) $s_duration;
         ini_set('session.gc_maxlifetime', (string) $duration);
-        session_set_cookie_params(['lifetime' => $duration, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax']);
+        $sessionCookieParams['lifetime'] = $duration;
     }
+    session_set_cookie_params($sessionCookieParams);
     session_start();
 }
 
@@ -94,7 +112,13 @@ require_once __DIR__ . '/php/logger.php';
 require_once __DIR__ . '/php/hooks.php';
 
 define('APP_VERSION', '1.0.1'); // Global assets version
-define('DEBUG', true); // Geliştirme aşamasında true, yayında false yapın
+$debugEnv = getenv('APP_DEBUG');
+$remoteIp = $_SERVER['REMOTE_ADDR'] ?? '';
+$isLocalIp = in_array($remoteIp, ['127.0.0.1', '::1'], true);
+$debugMode = ($debugEnv !== false)
+    ? (bool) filter_var($debugEnv, FILTER_VALIDATE_BOOLEAN)
+    : $isLocalIp;
+define('DEBUG', $debugMode);
 
 error_reporting(E_ALL);
 
@@ -112,8 +136,16 @@ set_exception_handler('sp_exception_handler');
 // 1. URL Tabanlı Ayarlar (Tarayıcı için)
 // ---------------------------------------------
 
-define('BASE_PATH', '/new/');
-define('BASE_URL', 'http://osman.center' . BASE_PATH);
+define('BASE_PATH', '/cms/');
+$baseScheme = (
+    (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+    || (strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https')
+) ? 'https' : 'http';
+$baseHost = $_SERVER['HTTP_HOST'] ?? 'osman.center';
+if (!preg_match('/^[a-zA-Z0-9.-]+(?::[0-9]+)?$/', $baseHost)) {
+    $baseHost = 'osman.center';
+}
+define('BASE_URL', $baseScheme . '://' . $baseHost . BASE_PATH);
 define('CDN_URL', BASE_URL . 'cdn/');
 
 // ---------------------------------------------
@@ -142,7 +174,13 @@ if (!function_exists('check_csrf')) {
     {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $token = $_POST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
-            if (!$token || $token !== ($_SESSION['csrf'] ?? '')) {
+            $sessionToken = $_SESSION['csrf'] ?? null;
+            if (
+                !is_string($token)
+                || !is_string($sessionToken)
+                || $token === ''
+                || !hash_equals($sessionToken, $token)
+            ) {
                 if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
                     header('Content-Type: application/json');
                     die(json_encode(['status' => 'error', 'message' => __('csrf_error')]));
@@ -253,4 +291,3 @@ if (!function_exists('__')) {
         return (string) $text;
     }
 }
-

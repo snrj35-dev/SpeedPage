@@ -34,6 +34,7 @@ try {
     // Load dynamic settings
     $settingsStmt = $db->query("SELECT `key`, `value` FROM settings");
     $settings = $settingsStmt->fetchAll(PDO::FETCH_KEY_PAIR);
+    $allowPagePhp = (($settings['allow_page_php'] ?? '0') === '1');
     require_once PHP_DIR . "theme-init.php";
 
     // 2. Input Handling
@@ -66,31 +67,40 @@ try {
 
         if (!empty($pageRow['content'])) {
             $rawContent = $pageRow['content'];
+            $hasPhpCode = (bool) preg_match('/<\\?(php|=)?/i', (string) $rawContent);
 
-            // Secure PHP Execution: Write to temp file and include
-            $tempDir = TEMP_DIR;
-            if (!is_dir($tempDir)) {
-                mkdir($tempDir, 0755, true);
-                if (file_exists(STORAGE_DIR)) {
-                     file_put_contents(STORAGE_DIR . '.htaccess', "Deny from all");
+            if ($hasPhpCode && !$allowPagePhp) {
+                $content = "<div class='alert alert-warning'><span>Bu sayfada PHP içeriği algılandı ve güvenlik nedeniyle çalıştırılmadı.</span></div>";
+                $found = true;
+            } elseif ($hasPhpCode) {
+                // Controlled PHP Execution: only when allow_page_php=1
+                $tempDir = TEMP_DIR;
+                if (!is_dir($tempDir)) {
+                    mkdir($tempDir, 0755, true);
+                    if (file_exists(STORAGE_DIR)) {
+                        file_put_contents(STORAGE_DIR . '.htaccess', "Deny from all");
+                    }
                 }
-            }
-            $tempFile = $tempDir . 'page_' . $slug . '_' . md5($rawContent) . '.php';
+                $tempFile = $tempDir . 'page_' . $slug . '_' . md5($rawContent) . '.php';
 
-            if (!file_exists($tempFile)) {
-                // Clean old temp files for this slug
-                array_map('unlink', glob($tempDir . 'page_' . $slug . '_*.php'));
-                file_put_contents($tempFile, $rawContent);
-            }
+                if (!file_exists($tempFile)) {
+                    // Clean old temp files for this slug
+                    array_map('unlink', glob($tempDir . 'page_' . $slug . '_*.php'));
+                    file_put_contents($tempFile, $rawContent);
+                }
 
-            ob_start();
-            try {
-                include $tempFile;
-            } catch (Throwable $e) {
-                echo "<div class='alert alert-danger'>Execution Error: " . e($e->getMessage()) . "</div>";
+                ob_start();
+                try {
+                    include $tempFile;
+                } catch (Throwable $e) {
+                    echo "<div class='alert alert-danger'>Execution Error: " . e($e->getMessage()) . "</div>";
+                }
+                $content = ob_get_clean();
+                $found = true;
+            } else {
+                $content = (string) $rawContent;
+                $found = true;
             }
-            $content = ob_get_clean();
-            $found = true;
         }
     }
 
